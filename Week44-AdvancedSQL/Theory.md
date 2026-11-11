@@ -27,7 +27,33 @@ By the end of this chapter you will be able to:
 
 ---
 
+## How to Study This Chapter
+
+The fundamentals are the focus. The advanced sections are helpful once those are solid.
+
+### Fundamentals — focus here
+
+- **Joins** (sections 1 and 2): chaining three or more tables, self-joins, `LEFT JOIN` and the unmatched-row pattern, what `RIGHT JOIN` and `FULL OUTER JOIN` return, and the pitfall in section 2.6 where a later inner join drops the unmatched rows a left join kept.
+- **Subqueries** (section 3): scalar, derived tables, correlated, `IN`, `EXISTS` / `NOT EXISTS`, and `ANY` / `ALL`, plus when a join is the clearer choice (section 3.9).
+- **Views you will create** (sections 6.1–6.7 and 6.9): what a view is, why to use one, `CREATE VIEW`, `CREATE OR REPLACE VIEW`, `DROP VIEW`, when a view is updatable, `WITH CHECK OPTION`, and the three TrailShop examples.
+- **CTEs you will write** (sections 7.1–7.4 and the comparison in 7.6): one CTE, several CTEs chained together, and why a CTE is easier to read than a derived table.
+
+### Advanced — extra and helpful
+
+> [!TIP]
+> **Advanced.** Helpful extra. Read this after the fundamentals are solid.
+>
+> - **Set operations** (all of section 4): the compatibility rules, `UNION`, `UNION ALL`, `INTERSECT`, `EXCEPT`, `ORDER BY` / `LIMIT` after the last `SELECT`, and chaining more than two queries.
+> - **Conditional expressions** (all of section 5): both forms of `CASE`, `COALESCE`, `NULLIF`, and `GREATEST` / `LEAST`.
+> - **Materialized views** (section 6.8): `CREATE MATERIALIZED VIEW` and `REFRESH MATERIALIZED VIEW`.
+> - **Recursive CTEs** (section 7.5): the anchor, the recursive step, and termination.
+> - **CTE materialization** (the performance note at the end of section 7.6): the PostgreSQL 12 change and `WITH cte AS MATERIALIZED (...)`.
+
+---
+
 ## 1. Multi-Table Joins Revisited
+
+> **Fundamentals.** This whole section is core: chaining three or more tables, and self-joins.
 
 ### 1.1 The Join Chain — Connecting 3+ Tables
 
@@ -129,6 +155,8 @@ ORDER BY c1.city;
 ---
 
 ## 2. Outer Joins in Depth
+
+> **Fundamentals.** This whole section is core: `LEFT`, `RIGHT`, and `FULL OUTER JOIN`, the unmatched-row pattern, and keeping a later join from dropping unmatched rows.
 
 ### 2.1 The Problem INNER JOIN Can't Solve
 
@@ -255,6 +283,8 @@ LEFT JOIN categories cat ON cat.category_id = pc.category_id;
 ---
 
 ## 3. Subqueries — Comprehensive
+
+> **Fundamentals.** This whole section is core: scalar, derived, and correlated subqueries, `IN`, `EXISTS`, `ANY`, `ALL`, and when a join is clearer.
 
 ### 3.1 What Is a Subquery?
 
@@ -479,11 +509,16 @@ PostgreSQL's optimizer can often transform subqueries into joins internally, so 
 
 ---
 
-## 4. Set Operations
+## 4. Set Operations (Advanced)
+
+> **Advanced.** This whole section is extra: the compatibility rules, `UNION`, `UNION ALL`, `INTERSECT`, `EXCEPT`, ordering the combined result, and chaining more than two queries.
+
+> [!TIP]
+> **Advanced.** Helpful extra. Read this after the fundamentals are solid.
 
 Set operations combine the **results** of two or more SELECT statements into a single result set. As the PostgreSQL documentation explains ([Combining Queries](https://www.postgresql.org/docs/current/queries-union.html)), these operations treat query results as mathematical sets.
 
-### 4.1 Rules for Set Operations
+### 4.1 Rules for Set Operations (Advanced)
 
 Both SELECT statements must:
 1. Return the **same number of columns**
@@ -491,7 +526,7 @@ Both SELECT statements must:
 
 Column names in the result come from the **first** SELECT.
 
-### 4.2 UNION
+### 4.2 UNION (Advanced)
 
 Combines results and **removes duplicates** (like a mathematical set union).
 
@@ -502,7 +537,7 @@ UNION
 SELECT shipping_city FROM orders;
 ```
 
-### 4.3 UNION ALL
+### 4.3 UNION ALL (Advanced)
 
 Combines results and **keeps all duplicates**. Faster than UNION because it skips the deduplication step.
 
@@ -519,7 +554,7 @@ JOIN order_items oi ON oi.product_id = p.product_id;
 
 **When to use UNION ALL**: When you *know* there are no duplicates, or when you *want* duplicates (e.g., counting total occurrences).
 
-### 4.4 INTERSECT
+### 4.4 INTERSECT (Advanced)
 
 Returns only rows that appear in **both** result sets.
 
@@ -530,7 +565,7 @@ INTERSECT
 SELECT customer_id FROM orders;
 ```
 
-### 4.5 EXCEPT
+### 4.5 EXCEPT (Advanced)
 
 Returns rows from the first query that are **not** in the second query (set difference).
 
@@ -543,7 +578,7 @@ SELECT customer_id FROM orders;
 
 This is another way to find "unmatched" rows, alongside LEFT JOIN + IS NULL and NOT EXISTS.
 
-### 4.6 Ordering and Limiting Set Operation Results
+### 4.6 Ordering and Limiting Set Operation Results (Advanced)
 
 You can add `ORDER BY` and `LIMIT` at the end, after the last SELECT:
 
@@ -559,7 +594,7 @@ ORDER BY price DESC
 LIMIT 10;
 ```
 
-### 4.7 Combining More Than Two Queries
+### 4.7 Combining More Than Two Queries (Advanced)
 
 You can chain set operations:
 
@@ -575,13 +610,18 @@ PostgreSQL evaluates them left to right. Use parentheses to change precedence if
 
 ---
 
-## 5. Conditional Expressions
+## 5. Conditional Expressions (Advanced)
 
-### 5.1 CASE — The SQL "If/Else"
+> **Advanced.** This whole section is extra: both forms of `CASE`, `COALESCE`, `NULLIF`, and `GREATEST` / `LEAST`.
+
+> [!TIP]
+> **Advanced.** Helpful extra. Read this after the fundamentals are solid.
+
+### 5.1 CASE — The SQL "If/Else" (Advanced)
 
 CASE lets you add conditional logic directly in your queries. There are two forms.
 
-#### Simple CASE
+#### Simple CASE (Advanced)
 
 Compares an expression to a list of values:
 
@@ -598,7 +638,7 @@ SELECT
 FROM orders;
 ```
 
-#### Searched CASE
+#### Searched CASE (Advanced)
 
 Uses boolean conditions (more flexible):
 
@@ -615,7 +655,7 @@ SELECT
 FROM products;
 ```
 
-#### CASE Inside Aggregates
+#### CASE Inside Aggregates (Advanced)
 
 This powerful pattern lets you do conditional counting and summing:
 
@@ -643,7 +683,7 @@ GROUP BY tier
 ORDER BY revenue DESC;
 ```
 
-### 5.2 COALESCE
+### 5.2 COALESCE (Advanced)
 
 Returns the **first non-NULL** argument. Perfect for providing default values.
 
@@ -659,7 +699,7 @@ SELECT COALESCE(primary_email, secondary_email, 'no-email@unknown.com') AS email
 FROM contacts;
 ```
 
-### 5.3 NULLIF
+### 5.3 NULLIF (Advanced)
 
 Returns NULL if the two arguments are **equal**; otherwise returns the first argument. Useful for avoiding division by zero.
 
@@ -673,7 +713,7 @@ FROM product_stats;
 
 If `units_sold` is 0, `NULLIF(units_sold, 0)` returns NULL, and dividing by NULL gives NULL instead of an error.
 
-### 5.4 GREATEST and LEAST
+### 5.4 GREATEST and LEAST (Advanced)
 
 Return the largest or smallest value from a list of expressions.
 
@@ -692,6 +732,8 @@ FROM orders;
 ---
 
 ## 6. Views
+
+> **Mixed.** Sections 6.1–6.7 and 6.9 are fundamentals. Section 6.8 (materialized views) is advanced.
 
 ### 6.1 What Is a View?
 
@@ -791,7 +833,10 @@ UPDATE active_products SET stock_quantity = 0 WHERE product_id = 5;
 -- ERROR: new row violates check option for view "active_products"
 ```
 
-### 6.8 Materialized Views (Brief Introduction)
+### 6.8 Materialized Views (Brief Introduction, Advanced)
+
+> [!TIP]
+> **Advanced.** Helpful extra. Read this after the fundamentals in this section are solid.
 
 A **materialized view** stores the query result physically on disk (like a cached snapshot). It's faster to query but must be refreshed manually.
 
@@ -862,6 +907,8 @@ GROUP BY cat.category_name;
 ---
 
 ## 7. Common Table Expressions (CTEs) — The WITH Clause
+
+> **Mixed.** Sections 7.1–7.4 and the readability comparison in 7.6 are fundamentals. Section 7.5 (recursive CTEs) and the performance note at the end of 7.6 are advanced.
 
 ### 7.1 What Is a CTE?
 
@@ -938,7 +985,10 @@ CROSS JOIN avg_category_revenue acr
 ORDER BY cr.revenue DESC;
 ```
 
-### 7.5 Recursive CTEs (Brief Introduction)
+### 7.5 Recursive CTEs (Brief Introduction, Advanced)
+
+> [!TIP]
+> **Advanced.** Helpful extra. Read this after the fundamentals in this section are solid.
 
 Recursive CTEs allow a CTE to **reference itself**, enabling queries on hierarchical or graph-like data.
 
@@ -1009,32 +1059,39 @@ WHERE total_spent > 200;
 
 The CTE version reads top-to-bottom: "First, compute customer totals. Then, select those above 200." The subquery version forces you to read inside-out.
 
+> [!TIP]
+> **Advanced.** Helpful extra.
+
 **Performance note**: In modern PostgreSQL (12+), CTEs are optimized inline by default (just like subqueries). In older versions, CTEs were always materialized (computed once and cached). You can force materialization with `WITH cte AS MATERIALIZED (...)` if needed.
 
 ---
 
 ## 8. Key Terms
 
-| Term | Definition |
-|------|-----------|
-| Self-join | Joining a table to itself using different aliases |
-| Outer join | JOIN that preserves unmatched rows (LEFT, RIGHT, FULL) |
-| Subquery | A SELECT statement nested inside another statement |
-| Correlated subquery | Subquery that references the outer query; executes per outer row |
-| Scalar subquery | Subquery returning exactly one value |
-| Derived table | Subquery in the FROM clause; must have an alias |
-| EXISTS | Predicate that tests whether a subquery returns any rows |
-| Set operation | UNION, INTERSECT, or EXCEPT combining two query results |
-| CASE expression | Conditional logic that returns different values based on conditions |
-| COALESCE | Returns the first non-NULL argument |
-| View | Named stored query that acts as a virtual table |
-| Materialized view | View whose results are physically stored and must be refreshed |
-| CTE | Common Table Expression; temporary named result within WITH clause |
-| Recursive CTE | CTE that references itself for hierarchical/iterative queries |
+> **Mixed.** The Level column marks each term. Set operations, `CASE`, `COALESCE`, materialized views, and recursive CTEs are advanced. The other terms are fundamentals.
+
+| Term | Level | Definition |
+|------|--------------|-----------|
+| Self-join | Fundamental | Joining a table to itself using different aliases |
+| Outer join | Fundamental | JOIN that preserves unmatched rows (LEFT, RIGHT, FULL) |
+| Subquery | Fundamental | A SELECT statement nested inside another statement |
+| Correlated subquery | Fundamental | Subquery that references the outer query; executes per outer row |
+| Scalar subquery | Fundamental | Subquery returning exactly one value |
+| Derived table | Fundamental | Subquery in the FROM clause; must have an alias |
+| EXISTS | Fundamental | Predicate that tests whether a subquery returns any rows |
+| Set operation | Advanced | UNION, INTERSECT, or EXCEPT combining two query results |
+| CASE expression | Advanced | Conditional logic that returns different values based on conditions |
+| COALESCE | Advanced | Returns the first non-NULL argument |
+| View | Fundamental | Named stored query that acts as a virtual table |
+| Materialized view | Advanced | View whose results are physically stored and must be refreshed |
+| CTE | Fundamental | Common Table Expression; temporary named result within WITH clause |
+| Recursive CTE | Advanced | CTE that references itself for hierarchical/iterative queries |
 
 ---
 
 ## 9. Reading
+
+> **Mixed.** Both reading lists stay as written. The conditional-expressions link supports advanced section 5. The CTE and subquery links support the fundamentals.
 
 ### Required
 
@@ -1051,6 +1108,8 @@ The CTE version reads top-to-bottom: "First, compute customer totals. Then, sele
 ---
 
 ## 10. Summary
+
+> **Fundamentals.** This recap leads with the focus topics. The set-operation and conditional-expression lines are the advanced topics from sections 4 and 5.
 
 This chapter upgraded your SQL toolkit significantly:
 
