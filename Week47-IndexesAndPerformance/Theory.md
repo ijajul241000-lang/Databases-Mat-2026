@@ -27,7 +27,44 @@ By the end of this chapter you will be able to:
 
 ---
 
+## How to Study This Chapter
+
+The fundamentals are the focus. The advanced sections are helpful once those are solid.
+
+### Fundamentals — focus here
+
+- **Why queries slow down** (section 1): sequential scan and O(n) growth.
+- **What an index is** (section 2): a separate structure that maps values to rows.
+- **B-trees at the level you will use** (sections 3.1–3.3): the default index, the tree idea, and the O(log n) comparison table, including about 20 lookups for one million rows.
+- **B-tree as the index you create** (section 4.1).
+- **Indexes you will write and explain** (sections 5.1–5.4 and 5.6): basic, unique, multi-column with the leftmost prefix, partial, and covering indexes (`INCLUDE`) as the way an Index Only Scan gets its columns.
+- **Automatic indexes** (section 6): primary keys and `UNIQUE` get an index; foreign keys do not.
+- **Reading a plan** (sections 7.1–7.3 and 7.6): `EXPLAIN` versus `EXPLAIN ANALYZE`, what cost, rows, time, and rows removed by filter mean, and that `EXPLAIN ANALYZE` really runs `INSERT`, `UPDATE`, and `DELETE`.
+- **The scans to recognize** (sections 8.1–8.3 and the comparison in 8.5): Seq Scan, Index Scan, and Index Only Scan.
+- **The before/after pattern** (sections 10.1–10.2): a lookup by name, and an index on a foreign key.
+- **When to create an index, and when not to** (sections 11 and 12).
+- **Query habits that keep indexes useful** (sections 14.1 and 14.3): avoid `SELECT *`, and do not wrap an indexed column in a function.
+
+### Advanced — extra and helpful
+
+> [!TIP]
+> **Advanced.** Helpful extra. Read this after the fundamentals are solid.
+>
+> - **B-tree internals** (sections 3.4–3.5): 8 KB pages and why the tree stays balanced.
+> - **Other index types** (sections 4.2–4.7): Hash, GIN, GiST, BRIN, SP-GiST, and the comparison table.
+> - **Other index forms** (sections 5.5, 5.7, and 5.8): expression indexes, the full `CREATE INDEX` syntax, and `CONCURRENTLY`.
+> - **Plan extras** (sections 7.4–7.5): `BUFFERS`, and JSON / YAML output.
+> - **Bitmap scans** (section 8.4).
+> - **Join algorithms** (all of section 9): Nested Loop, Hash Join, and Merge Join.
+> - **The join before/after example** (section 10.3).
+> - **Index maintenance** (all of section 13): `VACUUM`, `REINDEX`, and the monitoring queries.
+> - **Other query tips** (sections 14.2, 14.4, 14.5, and 14.6): `EXISTS` versus `IN`, `LIMIT` with `ORDER BY`, materialized views, and the `ANALYZE` command.
+
+---
+
 ## 1 — Why Queries Slow Down
+
+> **Fundamentals.** This whole section is core: sequential scans and why they slow down as tables grow.
 
 ### 1.1 Sequential Scan: Reading Everything
 
@@ -66,6 +103,8 @@ As Watt & Eng note in *Database Design — 2nd Edition*: "Without indexes, the D
 ---
 
 ## 2 — What Is an Index?
+
+> **Fundamentals.** This whole section is core: an index is a separate structure that maps values to rows.
 
 ### 2.1 The Book Index Analogy
 
@@ -108,6 +147,8 @@ Notice that the index entries are **sorted**. This sorted order is what makes fa
 ---
 
 ## 3 — B-Tree Indexes
+
+> **Mixed.** Sections 3.1–3.3 are fundamentals: the default B-tree, how the tree is searched, and O(log n). Sections 3.4–3.5 (pages and why the tree stays balanced) are advanced.
 
 ### 3.1 The Default Index Type
 
@@ -162,19 +203,27 @@ B-trees provide **O(log n)** lookup time. This is dramatically better than O(n) 
 
 Even with a billion rows, a B-tree index finds any value in roughly 30 comparisons.
 
-### 3.4 Pages and Disk I/O
+### 3.4 Pages and Disk I/O (Advanced)
+
+> [!TIP]
+> **Advanced.** Helpful extra. Read this after the fundamentals in this section are solid.
 
 PostgreSQL stores data in **8 KB pages** (also called blocks). Each B-tree node corresponds to one page on disk. A single page can hold hundreds of index entries, which is why real B-trees are very shallow — typically 3–4 levels deep even for tables with millions of rows.
 
 Each level of the tree requires one **disk I/O** operation (reading one page). So finding a row in a million-row table might require only 3–4 disk reads instead of thousands.
 
-### 3.5 Why "Balanced" Matters
+### 3.5 Why "Balanced" Matters (Advanced)
+
+> [!TIP]
+> **Advanced.** Helpful extra. Read this after the fundamentals in this section are solid.
 
 The "B" in B-tree stands for "balanced." Every path from the root to any leaf node has the **same length**. This guarantees that lookup time is consistent regardless of which value you're searching for. Unlike a simple binary search tree (which can become lopsided and degrade to O(n)), a B-tree automatically rebalances itself during insertions and deletions.
 
 ---
 
 ## 4 — Index Types in PostgreSQL
+
+> **Mixed.** Section 4.1 (B-tree) is fundamental. Sections 4.2–4.7 (Hash, GIN, GiST, BRIN, SP-GiST, and the comparison) are advanced.
 
 PostgreSQL offers several index types, each optimized for different kinds of queries. Choosing the right type matters — using a B-tree where a GIN index is needed (or vice versa) can mean the difference between a fast query and a useless index.
 
@@ -195,7 +244,10 @@ SELECT * FROM products WHERE price > 50 ORDER BY price;
 
 **When to use**: Most situations. If you're unsure which type to pick, B-tree is almost always the right choice.
 
-### 4.2 Hash
+### 4.2 Hash (Advanced)
+
+> [!TIP]
+> **Advanced.** Helpful extra. Read this after the fundamentals in this section are solid.
 
 Hash indexes use a hash function to map values to buckets. They support **only equality** comparisons (`=`).
 
@@ -211,7 +263,10 @@ SELECT * FROM products WHERE name > 'M';
 
 **When to use**: Rarely. Hash indexes are slightly faster than B-tree for pure equality lookups and use less space, but they don't support range queries, ordering, or multi-column indexes. In most cases, B-tree is a better overall choice.
 
-### 4.3 GIN (Generalized Inverted Index)
+### 4.3 GIN (Generalized Inverted Index, Advanced)
+
+> [!TIP]
+> **Advanced.** Helpful extra. Read this after the fundamentals in this section are solid.
 
 GIN indexes are designed for values that contain multiple elements — arrays, JSONB documents, and full-text search vectors. They index each individual element and point back to the rows containing it.
 
@@ -261,7 +316,10 @@ SELECT * FROM products WHERE attributes @> '{"material": "leather"}';
 
 **When to use**: Full-text search, array containment queries, JSONB queries.
 
-### 4.4 GiST (Generalized Search Tree)
+### 4.4 GiST (Generalized Search Tree, Advanced)
+
+> [!TIP]
+> **Advanced.** Helpful extra. Read this after the fundamentals in this section are solid.
 
 GiST indexes support complex data types that don't fit neatly into B-tree ordering — geometric shapes, ranges, and spatial data.
 
@@ -307,7 +365,10 @@ WHERE valid_range @> CURRENT_DATE;
 
 **When to use**: Spatial/geometric data, range types, nearest-neighbor queries.
 
-### 4.5 BRIN (Block Range Index)
+### 4.5 BRIN (Block Range Index, Advanced)
+
+> [!TIP]
+> **Advanced.** Helpful extra. Read this after the fundamentals in this section are solid.
 
 BRIN indexes are extremely small and efficient for **large, physically ordered tables** — tables where the values in a column naturally increase with the physical order of the rows. Time-series data and log tables are perfect candidates.
 
@@ -332,7 +393,10 @@ WHERE created_at > NOW() - INTERVAL '24 hours';
 
 **When to use**: Very large tables (millions+ rows) where the indexed column correlates with the physical insertion order. Especially timestamps in log/event tables.
 
-### 4.6 SP-GiST (Space-Partitioned Generalized Search Tree)
+### 4.6 SP-GiST (Space-Partitioned Generalized Search Tree, Advanced)
+
+> [!TIP]
+> **Advanced.** Helpful extra. Read this after the fundamentals in this section are solid.
 
 SP-GiST supports partitioned search trees like quadtrees, k-d trees, and radix trees. It's useful for data that has a natural clustering structure that doesn't map well to balanced trees.
 
@@ -343,7 +407,10 @@ CREATE INDEX idx_customers_phone ON customers USING spgist (phone);
 
 **When to use**: Specialized scenarios involving hierarchical or space-partitioned data. Most applications won't need SP-GiST.
 
-### 4.7 Index Type Comparison
+### 4.7 Index Type Comparison (Advanced)
+
+> [!TIP]
+> **Advanced.** Helpful extra. Read this after the fundamentals in this section are solid.
 
 | Index Type | Supported Operators | Best Use Case | Size |
 |---|---|---|---|
@@ -357,6 +424,8 @@ CREATE INDEX idx_customers_phone ON customers USING spgist (phone);
 ---
 
 ## 5 — Creating Indexes
+
+> **Mixed.** Sections 5.1–5.4 and 5.6 are fundamentals: basic, unique, multi-column, partial, and covering indexes. Sections 5.5, 5.7, and 5.8 (expression indexes, the full syntax, and `CONCURRENTLY`) are advanced.
 
 ### 5.1 Basic Index
 
@@ -424,7 +493,10 @@ SELECT * FROM orders WHERE status = 'shipped' AND order_date > '2026-06-01';
 
 Partial indexes are excellent when you frequently query a specific subset of data — active users, pending orders, recent records.
 
-### 5.5 Expression Indexes
+### 5.5 Expression Indexes (Advanced)
+
+> [!TIP]
+> **Advanced.** Helpful extra. Read this after the fundamentals in this section are solid.
 
 An expression index indexes the result of an expression or function rather than a raw column value:
 
@@ -463,7 +535,10 @@ WHERE customer_id = 42;
 
 The `INCLUDE` columns are stored in the leaf nodes of the index but aren't part of the search tree structure. This means they don't affect sort order or search capability — they're just along for the ride.
 
-### 5.7 Full Syntax Reference
+### 5.7 Full Syntax Reference (Advanced)
+
+> [!TIP]
+> **Advanced.** Helpful extra. Read this after the fundamentals in this section are solid.
 
 ```sql
 CREATE [ UNIQUE ] INDEX [ CONCURRENTLY ] [ [ IF NOT EXISTS ] index_name ]
@@ -479,7 +554,10 @@ CREATE [ UNIQUE ] INDEX [ CONCURRENTLY ] [ [ IF NOT EXISTS ] index_name ]
     [ WHERE predicate ];
 ```
 
-### 5.8 CONCURRENTLY: Creating Indexes in Production
+### 5.8 CONCURRENTLY: Creating Indexes in Production (Advanced)
+
+> [!TIP]
+> **Advanced.** Helpful extra. Read this after the fundamentals in this section are solid.
 
 By default, `CREATE INDEX` locks the table against writes for the duration of index creation. On a large table, this can take minutes — unacceptable in production.
 
@@ -499,6 +577,8 @@ Always use `CONCURRENTLY` when creating indexes on production tables that are ac
 ---
 
 ## 6 — Automatic Indexes
+
+> **Fundamentals.** This whole section is core: primary keys and `UNIQUE` get an index; foreign keys do not.
 
 ### 6.1 Primary Keys and UNIQUE Constraints
 
@@ -558,6 +638,8 @@ As Watt & Eng emphasize in *Database Design — 2nd Edition*: foreign key column
 
 ## 7 — EXPLAIN and EXPLAIN ANALYZE
 
+> **Mixed.** Sections 7.1–7.3 and 7.6 are fundamentals: `EXPLAIN`, `EXPLAIN ANALYZE`, how to read the numbers, and the warning that `ANALYZE` runs the statement. Sections 7.4–7.5 (`BUFFERS` and JSON / YAML output) are advanced.
+
 Understanding *how* PostgreSQL executes your queries is essential for optimization. The `EXPLAIN` command shows you the **execution plan** — the strategy PostgreSQL chose.
 
 For full documentation, see: [https://www.postgresql.org/docs/current/using-explain.html](https://www.postgresql.org/docs/current/using-explain.html)
@@ -610,7 +692,10 @@ Each line in the output represents a **plan node**. Here's what the numbers mean
 | `loops=1` | How many times this node was executed |
 | `Rows Removed by Filter: 999` | Rows examined but didn't match the filter |
 
-### 7.4 BUFFERS: Seeing Disk I/O
+### 7.4 BUFFERS: Seeing Disk I/O (Advanced)
+
+> [!TIP]
+> **Advanced.** Helpful extra. Read this after the fundamentals in this section are solid.
 
 Adding `BUFFERS` shows how many pages were read:
 
@@ -631,7 +716,10 @@ Execution Time: 0.478 ms
 - `shared hit=15` — 15 pages read from the buffer cache (memory)
 - `shared read=X` would mean pages read from disk (slower)
 
-### 7.5 Format Options
+### 7.5 Format Options (Advanced)
+
+> [!TIP]
+> **Advanced.** Helpful extra. Read this after the fundamentals in this section are solid.
 
 PostgreSQL can output plans in different formats:
 
@@ -658,6 +746,8 @@ The `ROLLBACK` undoes the deletion, but you still get the execution plan with re
 ---
 
 ## 8 — Scan Types
+
+> **Mixed.** Sections 8.1–8.3 and 8.5 are fundamentals: Seq Scan, Index Scan, Index Only Scan, and the comparison. Section 8.4 (bitmap scans) is advanced.
 
 When PostgreSQL reads data from a table, it uses one of several scanning strategies. The query planner chooses the strategy based on table size, available indexes, and the estimated selectivity of the query.
 
@@ -713,7 +803,10 @@ Index Only Scan using idx_products_name_price on products  (cost=0.28..4.29 rows
 
 Index Only Scans are the fastest scan type, but they require a check against the **visibility map** to ensure the data is up-to-date. Regular `VACUUM` keeps the visibility map current.
 
-### 8.4 Bitmap Index Scan + Bitmap Heap Scan
+### 8.4 Bitmap Index Scan + Bitmap Heap Scan (Advanced)
+
+> [!TIP]
+> **Advanced.** Helpful extra. Read this after the fundamentals in this section are solid.
 
 This is a two-step process that combines the benefits of index lookup with the efficiency of sequential reading:
 
@@ -744,11 +837,16 @@ Bitmap Heap Scan on products  (cost=4.30..15.20 rows=150 width=64)
 
 ---
 
-## 9 — Join Algorithms
+## 9 — Join Algorithms (Advanced)
+
+> **Advanced.** This whole section is extra: Nested Loop, Hash Join, and Merge Join.
+
+> [!TIP]
+> **Advanced.** Helpful extra. Read this after the fundamentals are solid.
 
 When a query joins two or more tables, PostgreSQL must decide *how* to combine them. The choice of join algorithm has a significant impact on performance.
 
-### 9.1 Nested Loop Join
+### 9.1 Nested Loop Join (Advanced)
 
 The simplest algorithm. For each row in the outer table, scan the inner table for matching rows.
 
@@ -775,7 +873,7 @@ Nested Loop  (cost=0.56..24.80 rows=5 width=16)
 
 **When chosen**: Small outer result set with an indexed inner table. Very efficient for highly selective queries.
 
-### 9.2 Hash Join
+### 9.2 Hash Join (Advanced)
 
 PostgreSQL builds a **hash table** from the smaller input, then probes it with each row from the larger input.
 
@@ -804,7 +902,7 @@ HashAggregate  (cost=85.00..90.00 rows=500 width=40)
 
 **When chosen**: Equality joins on unindexed columns, or when both tables are large.
 
-### 9.3 Merge Join
+### 9.3 Merge Join (Advanced)
 
 Both inputs are sorted on the join key, then merged together in a single pass.
 
@@ -834,7 +932,7 @@ Merge Join  (cost=50.00..70.00 rows=1000 width=64)
 
 **When chosen**: Both inputs are already sorted (or can be sorted cheaply), large datasets, range joins.
 
-### 9.4 Join Algorithm Comparison
+### 9.4 Join Algorithm Comparison (Advanced)
 
 | Algorithm | Complexity | Best For | Requires |
 |---|---|---|---|
@@ -845,6 +943,8 @@ Merge Join  (cost=50.00..70.00 rows=1000 width=64)
 ---
 
 ## 10 — Before/After Examples
+
+> **Mixed.** Sections 10.1–10.2 are fundamentals: a name lookup and an index on a foreign key. Section 10.3 (the join algorithm change) is advanced.
 
 Let's see the dramatic impact of indexes on real TrailShop queries.
 
@@ -920,7 +1020,10 @@ Execution Time: 0.040 ms
 
 **Result**: 312 ms → 0.04 ms — a **7,800× improvement**.
 
-### 10.3 Query 3: Join Query with Algorithm Change
+### 10.3 Query 3: Join Query with Algorithm Change (Advanced)
+
+> [!TIP]
+> **Advanced.** Helpful extra. Read this after the fundamentals in this section are solid.
 
 **Before** (no indexes on FK columns):
 
@@ -997,6 +1100,8 @@ Execution Time: 0.150 ms
 
 ## 11 — When to Create Indexes
 
+> **Fundamentals.** This whole section is core: when an index is worth creating.
+
 ### 11.1 Decision Criteria
 
 Not every column needs an index. Focus on columns that appear in:
@@ -1039,6 +1144,8 @@ CREATE INDEX idx_orders_status_date ON orders(status, order_date);
 ---
 
 ## 12 — When NOT to Create Indexes
+
+> **Fundamentals.** This whole section is core: small tables, low selectivity, write-heavy tables, and over-indexing.
 
 Indexes are not free. Every index comes with costs, and over-indexing can be worse than under-indexing.
 
@@ -1091,11 +1198,16 @@ Consider the read/write ratio of the table:
 
 ---
 
-## 13 — Index Maintenance
+## 13 — Index Maintenance (Advanced)
+
+> **Advanced.** This whole section is extra: `VACUUM`, `REINDEX`, and the monitoring queries.
+
+> [!TIP]
+> **Advanced.** Helpful extra. Read this after the fundamentals are solid.
 
 Indexes, like the tables they serve, require ongoing maintenance to stay healthy and performant.
 
-### 13.1 VACUUM and Dead Tuples
+### 13.1 VACUUM and Dead Tuples (Advanced)
 
 PostgreSQL uses MVCC (Multi-Version Concurrency Control) — when you update or delete a row, the old version isn't immediately removed. It becomes a **dead tuple**. Over time, dead tuples accumulate and cause **bloat** — wasted space in both tables and indexes.
 
@@ -1114,7 +1226,7 @@ VACUUM FULL products;
 
 PostgreSQL runs **autovacuum** in the background, which automatically vacuums tables when dead tuples accumulate beyond a threshold. In most cases, autovacuum handles this for you — but monitoring is still important.
 
-### 13.2 REINDEX: Rebuilding Bloated Indexes
+### 13.2 REINDEX: Rebuilding Bloated Indexes (Advanced)
 
 Even with regular `VACUUM`, B-tree indexes can become bloated over time — pages that were once full may become sparsely populated. `REINDEX` rebuilds an index from scratch:
 
@@ -1129,7 +1241,7 @@ REINDEX TABLE products;
 REINDEX INDEX CONCURRENTLY idx_products_name;
 ```
 
-### 13.3 Monitoring Index Usage
+### 13.3 Monitoring Index Usage (Advanced)
 
 PostgreSQL tracks index usage statistics. Use these to find unused indexes that can be dropped:
 
@@ -1147,7 +1259,7 @@ ORDER BY idx_scan ASC;
 
 An index with `idx_scan = 0` over a long period is a candidate for removal — it's consuming space and slowing writes without benefiting any query.
 
-### 13.4 Sequential Scans vs Index Scans
+### 13.4 Sequential Scans vs Index Scans (Advanced)
 
 Monitor whether tables are being scanned sequentially when they shouldn't be:
 
@@ -1168,7 +1280,7 @@ ORDER BY seq_scan DESC;
 
 A large table with a high `seq_scan` count and low `idx_scan` count may be missing an index.
 
-### 13.5 Index Size Monitoring
+### 13.5 Index Size Monitoring (Advanced)
 
 Track how much space your indexes consume:
 
@@ -1186,6 +1298,8 @@ ORDER BY pg_relation_size(indexname::regclass) DESC;
 
 ## 14 — Query Optimization Tips
 
+> **Mixed.** Sections 14.1 and 14.3 are fundamentals: avoid `SELECT *`, and do not wrap an indexed column in a function. Sections 14.2, 14.4, 14.5, and 14.6 are advanced.
+
 Indexes are the most powerful optimization tool, but they're not the only one. Here are additional techniques for writing faster queries.
 
 ### 14.1 Avoid SELECT *
@@ -1200,7 +1314,10 @@ SELECT * FROM products WHERE price > 100;
 SELECT name, price FROM products WHERE price > 100;
 ```
 
-### 14.2 EXISTS vs IN vs JOIN
+### 14.2 EXISTS vs IN vs JOIN (Advanced)
+
+> [!TIP]
+> **Advanced.** Helpful extra. Read this after the fundamentals in this section are solid.
 
 For existence checks, `EXISTS` is usually the best choice because it can stop searching as soon as it finds one match:
 
@@ -1240,7 +1357,10 @@ WHERE order_date >= '2026-01-01' AND order_date < '2027-01-01';
 
 If you must use a function, create an expression index (see Section 5.5).
 
-### 14.4 LIMIT with ORDER BY
+### 14.4 LIMIT with ORDER BY (Advanced)
+
+> [!TIP]
+> **Advanced.** Helpful extra. Read this after the fundamentals in this section are solid.
 
 When you need only the top N results, `LIMIT` combined with an appropriate index avoids sorting the entire result set:
 
@@ -1251,7 +1371,10 @@ ORDER BY order_date DESC
 LIMIT 10;
 ```
 
-### 14.5 Materialized Views
+### 14.5 Materialized Views (Advanced)
+
+> [!TIP]
+> **Advanced.** Helpful extra. Read this after the fundamentals in this section are solid.
 
 For expensive queries that are run frequently but don't need real-time data, materialized views store the precomputed result:
 
@@ -1275,7 +1398,10 @@ SELECT * FROM mv_sales_summary ORDER BY total_revenue DESC LIMIT 10;
 REFRESH MATERIALIZED VIEW mv_sales_summary;
 ```
 
-### 14.6 The ANALYZE Command
+### 14.6 The ANALYZE Command (Advanced)
+
+> [!TIP]
+> **Advanced.** Helpful extra. Read this after the fundamentals in this section are solid.
 
 PostgreSQL maintains **statistics** about the data in each column — the number of distinct values, most common values, histogram of value distribution. The query planner uses these statistics to estimate costs and choose execution plans.
 
@@ -1295,36 +1421,40 @@ PostgreSQL's autovacuum process runs `ANALYZE` automatically, but after bulk dat
 
 ## Key Terms
 
-| Term | Definition |
-|---|---|
-| **Sequential Scan (Seq Scan)** | A scan that reads every row in a table from beginning to end |
-| **Index** | A separate data structure that maps column values to row locations for fast lookup |
-| **B-tree** | A balanced tree data structure used as the default index type; provides O(log n) lookup |
-| **Hash Index** | An index using a hash function; supports only equality comparisons |
-| **GIN (Generalized Inverted Index)** | An index type for multi-element values: arrays, JSONB, full-text search |
-| **GiST (Generalized Search Tree)** | An index type for complex data: spatial, range, nearest-neighbor queries |
-| **BRIN (Block Range Index)** | A compact index storing min/max per block range; ideal for large sequential tables |
-| **Index Scan** | A scan that traverses an index then fetches matching rows from the table |
-| **Index Only Scan** | A scan answered entirely from the index without accessing the table |
-| **Bitmap Index Scan** | A scan that builds a bitmap of matching pages from the index, then reads those pages |
-| **Execution Plan** | The strategy PostgreSQL chooses to execute a query, viewable with EXPLAIN |
-| **Cost Model** | The system of arbitrary cost units PostgreSQL uses to estimate and compare plan efficiency |
-| **Selectivity** | The fraction of rows a condition matches; high selectivity = few matching rows |
-| **Covering Index** | An index that includes all columns needed by a query, enabling Index Only Scans |
-| **Partial Index** | An index that only includes rows matching a WHERE condition |
-| **Expression Index** | An index built on the result of a function or expression rather than a raw column |
-| **Nested Loop Join** | A join algorithm that scans the inner table for each row of the outer table |
-| **Hash Join** | A join algorithm that builds a hash table from one input and probes it with the other |
-| **Merge Join** | A join algorithm that merges two sorted inputs |
-| **VACUUM** | A maintenance operation that reclaims space from dead tuples |
-| **Bloat** | Wasted space in tables and indexes caused by accumulated dead tuples |
-| **Dead Tuple** | An obsolete row version left behind by UPDATE or DELETE under MVCC |
-| **Visibility Map** | A structure tracking which table pages contain only visible (up-to-date) tuples |
-| **Autovacuum** | A background process that automatically runs VACUUM and ANALYZE |
+> **Mixed.** The Level column marks each term. Hash, GIN, GiST, BRIN, bitmap scans, expression indexes, the three join algorithms, and the maintenance terms are advanced. The other terms are fundamentals.
+
+| Term | Level | Definition |
+|---|---|---|
+| **Sequential Scan (Seq Scan)** | Fundamental | A scan that reads every row in a table from beginning to end |
+| **Index** | Fundamental | A separate data structure that maps column values to row locations for fast lookup |
+| **B-tree** | Fundamental | A balanced tree data structure used as the default index type; provides O(log n) lookup |
+| **Hash Index** | Advanced | An index using a hash function; supports only equality comparisons |
+| **GIN (Generalized Inverted Index)** | Advanced | An index type for multi-element values: arrays, JSONB, full-text search |
+| **GiST (Generalized Search Tree)** | Advanced | An index type for complex data: spatial, range, nearest-neighbor queries |
+| **BRIN (Block Range Index)** | Advanced | A compact index storing min/max per block range; ideal for large sequential tables |
+| **Index Scan** | Fundamental | A scan that traverses an index then fetches matching rows from the table |
+| **Index Only Scan** | Fundamental | A scan answered entirely from the index without accessing the table |
+| **Bitmap Index Scan** | Advanced | A scan that builds a bitmap of matching pages from the index, then reads those pages |
+| **Execution Plan** | Fundamental | The strategy PostgreSQL chooses to execute a query, viewable with EXPLAIN |
+| **Cost Model** | Fundamental | The system of arbitrary cost units PostgreSQL uses to estimate and compare plan efficiency |
+| **Selectivity** | Fundamental | The fraction of rows a condition matches; high selectivity = few matching rows |
+| **Covering Index** | Fundamental | An index that includes all columns needed by a query, enabling Index Only Scans |
+| **Partial Index** | Fundamental | An index that only includes rows matching a WHERE condition |
+| **Expression Index** | Advanced | An index built on the result of a function or expression rather than a raw column |
+| **Nested Loop Join** | Advanced | A join algorithm that scans the inner table for each row of the outer table |
+| **Hash Join** | Advanced | A join algorithm that builds a hash table from one input and probes it with the other |
+| **Merge Join** | Advanced | A join algorithm that merges two sorted inputs |
+| **VACUUM** | Advanced | A maintenance operation that reclaims space from dead tuples |
+| **Bloat** | Advanced | Wasted space in tables and indexes caused by accumulated dead tuples |
+| **Dead Tuple** | Advanced | An obsolete row version left behind by UPDATE or DELETE under MVCC |
+| **Visibility Map** | Fundamental | A structure tracking which table pages contain only visible (up-to-date) tuples |
+| **Autovacuum** | Advanced | A background process that automatically runs VACUUM and ANALYZE |
 
 ---
 
 ## Reading Assignments
+
+> **Mixed.** Both reading lists stay as written. Further Reading is extra documentation. The index-types part of the first assignment supports the advanced types in section 4.
 
 1. **PostgreSQL Documentation — Indexes**
    [https://www.postgresql.org/docs/current/indexes.html](https://www.postgresql.org/docs/current/indexes.html)
@@ -1341,6 +1471,8 @@ PostgreSQL's autovacuum process runs `ANALYZE` automatically, but after bulk dat
 
 ## Further Reading
 
+> **Advanced.** Extra documentation. Read it after the fundamentals are solid.
+
 - **Use The Index, Luke** — [https://use-the-index-luke.com/](https://use-the-index-luke.com/)
   An excellent free online book dedicated entirely to database indexing. Covers B-tree internals, multi-column indexes, partial indexes, and query tuning with clear explanations and diagrams.
 
@@ -1354,6 +1486,8 @@ PostgreSQL's autovacuum process runs `ANALYZE` automatically, but after bulk dat
 ---
 
 ## Summary
+
+> **Fundamentals.** This recap leads with the focus topics. The sentence on Hash, GIN, GiST, and BRIN is the advanced material from section 4.
 
 This week you learned that query performance isn't magic — it's engineering. Without indexes, PostgreSQL must read every row in a table (O(n)), and performance degrades linearly as data grows. Indexes — primarily B-trees — provide O(log n) lookups by maintaining a sorted, balanced tree structure separate from the table data.
 
