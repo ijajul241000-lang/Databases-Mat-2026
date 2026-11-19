@@ -58,6 +58,18 @@ CREATE INDEX idx_product_categories_category_id ON product_categories (category_
 
 ### Step 3 — Re-measure
 
+Because the project database is so small, the PostgreSQL optimizer will most likely default to Seq Scan even after creating indexes.
+
+You can force PostgreSQL to use indexes by disabling the Seq scan using following commands:
+
+```sql
+--- Turn the seq scan off
+SET enable_seqscan = OFF;
+
+--- Turn the seq scan back on
+SET enable_seqscan = ON;
+```
+
 Run the same five queries with `EXPLAIN ANALYZE` again. Fill in your comparison table:
 
 | Query | Before Scan | Before Time (ms) | After Scan | After Time (ms) | Improvement Factor |
