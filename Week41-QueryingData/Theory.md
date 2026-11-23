@@ -30,7 +30,36 @@ By the end of this chapter you will be able to:
 
 ---
 
+## How to Study This Chapter
+
+The fundamentals are the focus. The advanced passages are helpful once those are solid.
+
+### Fundamentals — focus here
+
+- **SELECT** (section 1): specific columns, why to avoid `SELECT *`, aliases, `DISTINCT`, and arithmetic and `||` expressions.
+- **WHERE** (sections 2.1–2.7 and 2.9): comparisons, `AND` / `OR` / `NOT` and precedence, `BETWEEN`, `IN`, `LIKE`, `ILIKE`, and `IS NULL`.
+- **Sorting and pages** (sections 3.1–3.2, the expression form in 3.4, and 4.1–4.3): `ORDER BY` one or more columns, `ORDER BY` an expression, `LIMIT`, `OFFSET`, and the page formula.
+- **Aggregates, groups, and filters** (sections 5–7): `COUNT`, `SUM`, `AVG`, `MIN`, `MAX`, how aggregates skip `NULL`, the `GROUP BY` rule, and `WHERE` versus `HAVING`.
+- **Joins** (sections 8.1–8.6 and 8.8–8.9, and all of section 9): `INNER`, `LEFT`, `RIGHT`, `FULL OUTER`, `CROSS`, several conditions in `ON`, table aliases, and chaining three or more tables.
+- **Why the clause order matters** (section 10): an alias cannot be used in `WHERE`, and an aggregate belongs in `HAVING`.
+- **The worked TrailShop queries** (section 11).
+
+### Advanced — extra and helpful
+
+> [!TIP]
+> **Advanced.** Helpful extra. Read this after the fundamentals are solid.
+>
+> - **`SIMILAR TO`** (section 2.8).
+> - **`NULLS FIRST` / `NULLS LAST`** (section 3.3).
+> - **Ordering by column number** (the `ORDER BY 2` example at the end of section 3.4). Ordering by an expression above it stays fundamental.
+> - **`FETCH FIRST`** (section 4.4).
+> - **`NATURAL JOIN`** (section 8.7): what it does, and why to write an explicit `ON` instead.
+
+---
+
 ## 1. SELECT in Depth
+
+> **Fundamentals.** This whole section is core: specific columns, aliases, `DISTINCT`, and expressions.
 
 > **Reference:** Watt & Eng, *Database Design — 2nd Edition*, Chapter 16, covers the SELECT statement as the primary means of retrieving data from a relational database.
 
@@ -135,6 +164,8 @@ FROM customers;
 ---
 
 ## 2. WHERE — Filtering Rows
+
+> **Mixed.** Sections 2.1–2.7 and 2.9 are fundamentals. Section 2.8 (`SIMILAR TO`) is advanced.
 
 The WHERE clause filters which rows are returned. Only rows where the condition evaluates to TRUE are included.
 
@@ -251,7 +282,10 @@ SELECT name FROM products WHERE name ILIKE '%jacket%';
 
 > **PostgreSQL docs:** https://www.postgresql.org/docs/current/functions-matching.html
 
-### 2.8 SIMILAR TO (Brief)
+### 2.8 SIMILAR TO (Brief, Advanced)
+
+> [!TIP]
+> **Advanced.** Helpful extra. Read this after the fundamentals in this section are solid.
 
 SIMILAR TO combines LIKE-style syntax with basic regular expressions. It supports `|` for alternation and `()` for grouping:
 
@@ -287,6 +321,8 @@ SELECT name FROM products WHERE description IS NULL;
 
 ## 3. ORDER BY
 
+> **Mixed.** Sections 3.1–3.2 and ordering by an expression in 3.4 are fundamentals. Section 3.3 (`NULLS FIRST` / `NULLS LAST`) and the `ORDER BY 2` example in 3.4 are advanced.
+
 ORDER BY sorts the result set.
 
 ### 3.1 Basic Ordering
@@ -312,7 +348,10 @@ JOIN product_categories pc ON pc.product_id = p.product_id
 ORDER BY pc.category_id ASC, p.price DESC;
 ```
 
-### 3.3 NULLS FIRST / NULLS LAST
+### 3.3 NULLS FIRST / NULLS LAST (Advanced)
+
+> [!TIP]
+> **Advanced.** Helpful extra. Read this after the fundamentals in this section are solid.
 
 By default, NULLs sort last in ASC order and first in DESC order. You can override this:
 
@@ -336,6 +375,9 @@ FROM products
 ORDER BY price * stock DESC;
 ```
 
+> [!TIP]
+> **Advanced.** Helpful extra.
+
 You can also reference by column position (less readable, but valid):
 ```sql
 SELECT name, price FROM products ORDER BY 2 DESC;
@@ -344,6 +386,8 @@ SELECT name, price FROM products ORDER BY 2 DESC;
 ---
 
 ## 4. LIMIT and OFFSET
+
+> **Mixed.** Sections 4.1–4.3 are fundamentals. Section 4.4 (`FETCH FIRST`) is advanced.
 
 ### 4.1 LIMIT
 
@@ -381,7 +425,10 @@ SELECT * FROM products ORDER BY product_id LIMIT 10 OFFSET 20;
 -- General formula: OFFSET = (page_number - 1) * page_size
 ```
 
-### 4.4 FETCH FIRST (SQL Standard)
+### 4.4 FETCH FIRST (SQL Standard, Advanced)
+
+> [!TIP]
+> **Advanced.** Helpful extra. Read this after the fundamentals in this section are solid.
 
 The SQL standard equivalent of LIMIT:
 
@@ -398,6 +445,8 @@ Both LIMIT and FETCH FIRST work in PostgreSQL; LIMIT is more common in PostgreSQ
 ---
 
 ## 5. Aggregate Functions
+
+> **Fundamentals.** This whole section is core: `COUNT`, `SUM`, `AVG`, `MIN`, `MAX`, and how aggregates treat `NULL`.
 
 Aggregate functions compute a single value from a set of rows.
 
@@ -487,6 +536,8 @@ FROM products;
 
 ## 6. GROUP BY
 
+> **Fundamentals.** This whole section is core: how to group rows, and the rule that every selected column is grouped or aggregated.
+
 GROUP BY divides rows into groups based on column values, then applies aggregate functions to each group.
 
 ### 6.1 Basic GROUP BY
@@ -544,6 +595,8 @@ ORDER BY product_count DESC;
 
 ## 7. HAVING
 
+> **Fundamentals.** This whole section is core: `HAVING` filters groups, and `WHERE` filters rows before grouping.
+
 HAVING filters *groups* (after GROUP BY), just as WHERE filters *rows* (before GROUP BY).
 
 ### 7.1 Basic HAVING
@@ -596,6 +649,8 @@ HAVING SUM(p.price * p.stock) > 1000;
 ---
 
 ## 8. JOINs — Combining Data from Multiple Tables
+
+> **Mixed.** Sections 8.1–8.6 and 8.8–8.9 are fundamentals. Section 8.7 (`NATURAL JOIN`) is advanced.
 
 Joins are arguably the most powerful feature of SQL. They let you combine data from two or more tables based on related columns.
 
@@ -690,7 +745,10 @@ CROSS JOIN (VALUES ('S'), ('M'), ('L'), ('XL')) AS s(name);
 
 CROSS JOIN is rarely needed, but useful for generating combinations (e.g., all possible category-size pairs).
 
-### 8.7 NATURAL JOIN (Avoid)
+### 8.7 NATURAL JOIN (Avoid, Advanced)
+
+> [!TIP]
+> **Advanced.** Helpful extra. Read this after the fundamentals in this section are solid.
 
 NATURAL JOIN automatically joins on columns with the same name in both tables:
 
@@ -738,6 +796,8 @@ Aliases are *required* when you join a table to itself (self-join) or use the sa
 ---
 
 ## 9. Joining 3+ Tables
+
+> **Fundamentals.** This whole section is core: chaining three or more tables in one query.
 
 Real-world queries often need to traverse multiple relationships. You chain JOINs one after another:
 
@@ -791,6 +851,8 @@ ORDER BY customer, category;
 ---
 
 ## 10. Query Execution Order
+
+> **Fundamentals.** This whole section is core: an alias cannot be used in `WHERE`, and an aggregate belongs in `HAVING`.
 
 SQL has a logical order of execution that differs from the order you *write* the clauses. Understanding this order explains many common errors.
 
@@ -848,6 +910,8 @@ HAVING AVG(p.price) > 100;
 ---
 
 ## 11. Progressive TrailShop Queries
+
+> **Fundamentals.** This whole section is core: worked queries that use the clauses from this chapter.
 
 Let's apply everything with increasingly complex queries against the TrailShop database. For each query, I'll explain the thought process.
 
@@ -1030,33 +1094,39 @@ ORDER BY o.order_id;
 
 ## 12. Key Terms
 
-| Term | Definition |
-|------|-----------|
-| SELECT | SQL statement for retrieving data from tables |
-| WHERE | Clause that filters rows based on conditions |
-| ORDER BY | Clause that sorts the result set |
-| LIMIT / OFFSET | Clauses that restrict and paginate results |
-| Aggregate function | A function that computes one value from many rows (COUNT, SUM, AVG, MIN, MAX) |
-| GROUP BY | Clause that groups rows for aggregate calculations |
-| HAVING | Clause that filters groups (post-aggregation) |
-| JOIN | Combines rows from two or more tables based on related columns |
-| INNER JOIN | Returns only matching rows from both tables |
-| LEFT JOIN | Returns all rows from the left table, with NULLs for non-matching right rows |
-| FULL OUTER JOIN | Returns all rows from both tables, with NULLs where no match |
-| CROSS JOIN | Produces the Cartesian product of two tables |
-| Alias | A temporary name for a column or table within a query |
-| DISTINCT | Eliminates duplicate rows from the result |
-| Anti-join | Pattern using LEFT JOIN + IS NULL to find unmatched rows |
+> **Fundamentals.** Every term in this glossary is core vocabulary. The Level column marks that. `SIMILAR TO`, `NULLS FIRST` / `NULLS LAST`, `FETCH FIRST`, and `NATURAL JOIN` are explained in the chapter, and they are extra.
+
+| Term | Level | Definition |
+|------|--------------|-----------|
+| SELECT | Fundamental | SQL statement for retrieving data from tables |
+| WHERE | Fundamental | Clause that filters rows based on conditions |
+| ORDER BY | Fundamental | Clause that sorts the result set |
+| LIMIT / OFFSET | Fundamental | Clauses that restrict and paginate results |
+| Aggregate function | Fundamental | A function that computes one value from many rows (COUNT, SUM, AVG, MIN, MAX) |
+| GROUP BY | Fundamental | Clause that groups rows for aggregate calculations |
+| HAVING | Fundamental | Clause that filters groups (post-aggregation) |
+| JOIN | Fundamental | Combines rows from two or more tables based on related columns |
+| INNER JOIN | Fundamental | Returns only matching rows from both tables |
+| LEFT JOIN | Fundamental | Returns all rows from the left table, with NULLs for non-matching right rows |
+| FULL OUTER JOIN | Fundamental | Returns all rows from both tables, with NULLs where no match |
+| CROSS JOIN | Fundamental | Produces the Cartesian product of two tables |
+| Alias | Fundamental | A temporary name for a column or table within a query |
+| DISTINCT | Fundamental | Eliminates duplicate rows from the result |
+| Anti-join | Fundamental | Pattern using LEFT JOIN + IS NULL to find unmatched rows |
 
 ---
 
 ## 13. Reading
+
+> **Mixed.** Both reading lists stay as written. Further Reading is extra documentation for these same fundamental topics.
 
 ### Required Reading
 
 - Watt & Eng, *Database Design — 2nd Edition*, **Chapter 16** — all sections on SELECT, WHERE, aggregate functions, and joining tables
 
 ### Further Reading
+
+> **Advanced.** Extra documentation. Read it after the fundamentals are solid.
 
 - PostgreSQL Documentation — SELECT: https://www.postgresql.org/docs/current/sql-select.html
 - PostgreSQL Documentation — Aggregate Functions: https://www.postgresql.org/docs/current/functions-aggregate.html
@@ -1066,6 +1136,8 @@ ORDER BY o.order_id;
 ---
 
 ## 14. Summary
+
+> **Fundamentals.** This recap is the core of the chapter.
 
 This week you learned the most important SQL skill: extracting meaningful information from your database. You started with basic SELECT and built up to complex multi-table queries with aggregation:
 
