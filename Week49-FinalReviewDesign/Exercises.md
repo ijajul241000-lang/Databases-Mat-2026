@@ -1,40 +1,187 @@
 # Week 49 — Exercises: Final Review — Database Design (Optional)
 
 > [!IMPORTANT]
-> ***Optional Exam Preparation***
-> **No submission is required this week.** These exercises are for your own review before the final exam. Work through as many as you find helpful — skip any you do not need.
+> **_Optional Exam Preparation_**
+> **No submission is required this week.** These exercises practise the design fundamentals from Weeks 36, 37, 38, 39, and 45. Work in order. Write your answer before you open `Answers.md`.
 
-These exercises bring together everything you have learned about database design throughout the course. You can optionally review your completed TrailShop schema, then tackle fresh design and normalization challenges similar to what you may see on the exam.
-
-All SQL in these exercises targets **PostgreSQL**.
+The TrailShop names used here are the current schema: `products` has no `category_id`. Categories are linked through `product_categories`. `order_items.unit_price` is the price charged on that order.
 
 ---
 
-## Optional Exercise 1 — Self-Review: Your Completed TrailShop Schema
+## Exercise 1 — Concept Questions
 
-If you submitted your TrailShop project in Week 48, use these steps as a self-check — not for submission. Work through each step at your own pace to identify gaps before the exam.
+Answer in your own words. A short example is part of a complete answer.
 
-### 1.1 Document Your Complete Schema
+### 1.1 Week 36 — Data and information
 
-Write out every table in your TrailShop database using full `CREATE TABLE` statements. Include **all** columns, data types, constraints, and relationships. Do not leave anything out — if it exists in your database, it belongs here.
+`189.50` appears in a TrailShop spreadsheet. Explain the difference between data and information, using this value as the data.
 
-```sql
--- Example format (adapt to your actual tables):
-CREATE TABLE customers (
-    customer_id  SERIAL       PRIMARY KEY,
-    email        VARCHAR(255) NOT NULL UNIQUE,
-    first_name   VARCHAR(100) NOT NULL,
-    last_name    VARCHAR(100) NOT NULL,
-    created_at   TIMESTAMPTZ  NOT NULL DEFAULT NOW()
-);
-```
+> [!NOTE]
+> ***Your Answer***
+>
+> *(Write your answer here.)*
+>
+>
+>
+>
 
-Make sure every table includes:
-- A primary key
-- All foreign keys with `REFERENCES` and `ON DELETE` actions
-- `NOT NULL` where appropriate
-- `CHECK`, `UNIQUE`, and `DEFAULT` constraints where they apply
+### 1.2 Week 36 — Files and the three levels
 
+Name two problems of storing TrailShop's data in separate files. Then name the three levels of the three-schema architecture and say what each level describes.
+
+> [!NOTE]
+> ***Your Answer***
+>
+> *(Write your answer here.)*
+>
+>
+>
+>
+
+### 1.3 Week 37 — Keys
+
+In `customers`, both `customer_id` and `email` uniquely identify a row. Explain candidate key, primary key, and foreign key. Say which of `customer_id` and `email` is the primary key in TrailShop, and give one foreign key that references `customers`.
+
+> [!NOTE]
+> ***Your Answer***
+>
+> *(Write your answer here.)*
+>
+>
+>
+>
+
+### 1.4 Week 37 — Integrity and NULL
+
+State entity integrity and referential integrity. Explain why a primary key cannot be `NULL`, and why `WHERE phone = NULL` does not find customers with no phone.
+
+> [!NOTE]
+> ***Your Answer***
+>
+> *(Write your answer here.)*
+>
+>
+>
+>
+
+### 1.5 Week 38 — Cardinality
+
+For each sentence, give the cardinality (1:1, 1:N, or M:N) and say whether a junction table is required.
+
+1. A customer places orders. An order is placed by one customer.
+2. A product is filed under categories. A category contains products. A product may be in several categories.
+3. An order is paid by one payment. A payment pays one order.
+
+> [!NOTE]
+> ***Your Answer***
+>
+> *(Write your answer here.)*
+>
+>
+>
+>
+
+### 1.6 Week 38 — Participation
+
+`orders.customer_id` is `NOT NULL`. A customer may have no orders. Which side of Customer–Order has mandatory participation, and which side has optional participation? Why can a foreign key not force every order to have at least one `order_items` row?
+
+> [!NOTE]
+> ***Your Answer***
+>
+> *(Write your answer here.)*
+>
+>
+>
+>
+
+### 1.7 Week 39 — Types and the foreign key
+
+Choose a PostgreSQL type for each value, and say where the foreign key goes for "one customer places many orders": price, stock count, email, and the moment the customer registered.
+
+> [!NOTE]
+> ***Your Answer***
+>
+> *(Write your answer here.)*
+>
+>
+>
+>
+
+### 1.8 Week 39 — Surrogate and natural keys
+
+TrailShop's primary key for a customer is `customer_id`, while `email` is `UNIQUE`. Give one reason for that choice.
+
+> [!NOTE]
+> ***Your Answer***
+>
+> *(Write your answer here.)*
+>
+>
+>
+>
+
+### 1.9 Week 45 — Anomalies and dependencies
+
+A single table stores `order_id`, `customer_email`, `product_id`, and `product_name`, with primary key (`order_id`, `product_id`).
+
+1. Name one insertion, one update, and one deletion anomaly.
+2. Which columns are partial dependencies, and which normal form do they violate?
+3. Why is `order_items.unit_price` in the real TrailShop schema allowed to repeat a price that also exists on `products`?
+
+> [!NOTE]
+> ***Your Answer***
+>
+> *(Write your answer here.)*
+>
+>
+>
+>
+
+---
+
+## Exercise 2 — Design Challenge: SoundWave
+
+Design a database for **SoundWave**, a music streaming service. Use the same rules as TrailShop.
+
+**Requirements**
+
+- A **user** has an email, a username, and a subscription tier: `free`, `premium`, or `family`.
+- An **artist** has a name and a bio. An artist is associated with one or more **genres**. A genre has a name and can apply to many artists.
+- An **album** belongs to one artist and has a title, a release date, and a cover image URL.
+- A **song** belongs to one album and has a title, a duration in seconds, and a track number. Track numbers are unique within an album.
+- A **playlist** is created by one user and has a name and a description. A playlist contains many songs, and a song can appear in many playlists.
+- A user can **follow** many artists, and an artist can be followed by many users.
+- A **play** records that a user played a song at a particular time. The same user may play the same song many times.
+
+### 2.1 Entities, attributes, and keys
+
+List each entity, its attributes, its primary key, and any other candidate key.
+
+> [!NOTE]
+> ***Your Answer***
+>
+> *(Write your answer here.)*
+>
+>
+>
+>
+
+### 2.2 Relationships and cardinalities
+
+For each relationship, state the cardinality, which side is optional, and whether the foreign key sits on an existing table or in a junction.
+
+> [!NOTE]
+> ***Your Answer***
+>
+> *(Write your answer here.)*
+>
+>
+>
+>
+
+### 2.3 CREATE TABLE statements
+
+Write `CREATE TABLE` statements for every table, including the junction tables. Include primary keys, foreign keys, `NOT NULL`, `UNIQUE`, `CHECK`, and `DEFAULT` where the requirements need them. Choose an `ON DELETE` action you can justify.
 
 > [!NOTE]
 > ***Your SQL***
@@ -45,63 +192,9 @@ Make sure every table includes:
 >
 > ```
 
-### 1.2 Create or Update Your ER Diagram
+### 2.4 Third normal form
 
-Draw (or update) an ER diagram that reflects the **final state** of your schema. Every table, column, and relationship should be visible. Use crow's foot notation for cardinalities. You can use any tool you like — draw.io, dbdiagram.io, Mermaid, or even pen and paper photographed.
-
-
-> [!NOTE]
-> ***Your Answer***
->
-> *(Write your answer here.)*
->
->
->
->
-
-### 1.3 Verify Normalization
-
-Go through each table in your schema and confirm it is in **3NF**. For every table, briefly state:
-- What the primary key is
-- That every non-key column depends on the whole key and nothing but the key
-- If you have a deliberate exception to 3NF (e.g., a denormalized column for performance), document **why** you kept it
-
-
-> [!NOTE]
-> ***Your Answer***
->
-> *(Write your answer here.)*
->
->
->
->
-
-### 1.4 List All Constraints with Business Rules
-
-Create a table or list that maps every constraint in your schema to the business rule it enforces. For example:
-
-| Table | Constraint | Business Rule |
-|---|---|---|
-| `products` | `CHECK (price > 0)` | Products cannot have zero or negative price |
-| `order_items` | `CHECK (quantity >= 1)` | Every order line must contain at least one item |
-| `customers` | `UNIQUE (email)` | Each customer registers with a unique email address |
-
-Cover **all** your constraints — primary keys, foreign keys, NOT NULL, CHECK, UNIQUE, and DEFAULT.
-
-
-> [!NOTE]
-> ***Your Answer***
->
-> *(Write your answer here.)*
->
->
->
->
-
-### 1.5 Self-Review
-
-Open the **design quality checklist** from Theory Section 5. Go through every item and honestly evaluate your schema. Note any issues you find, then fix what you can. Document what you changed and why.
-
+For each table, name the primary key and state why the table is in 3NF. Say what would be wrong with storing an artist's genres as one comma-separated column.
 
 > [!NOTE]
 > ***Your Answer***
@@ -114,42 +207,28 @@ Open the **design quality checklist** from Theory Section 5. Go through every it
 
 ---
 
-## Optional Exercise 2 — Design Challenge: SoundWave
+## Exercise 3 — Normalization Drill: Rental Slips
 
-You are designing a complete database for a **music streaming service** called **SoundWave**. Here are the business requirements:
+TrailShop's rental desk kept this export. One slip can list several pieces of gear. The gear list was typed into a single cell as `gear_id:gear_name:days:daily_rate` values separated by commas.
 
-- **Users** can create accounts with an email, username, and a subscription tier (free, premium, or family).
-- **Artists** have profiles with a name, bio, and one or more genres.
-- **Albums** belong to an artist and have a title, release date, and cover image URL.
-- **Songs** belong to an album and have a title, duration (in seconds), and track number.
-- **Playlists** are created by users and have a name and description.
-- Playlists contain songs — a song can appear in many playlists, and a playlist contains many songs.
-- Users can **follow** artists.
-- **Play history** tracks which user played which song and when.
+**rental_slips**
 
-### 2.1 Identify Entities and Attributes
+| slip_id | slip_date | customer_id | customer_name | customer_email | gear_list |
+| --- | --- | --- | --- | --- | --- |
+| 501 | 2026-06-01 | 3 | Anna Virtanen | anna@mail.fi | `10:Ridge Tent:3:12.00, 11:Stove:3:4.50` |
+| 502 | 2026-06-02 | 3 | Anna Virtanen | anna@mail.fi | `10:Ridge Tent:2:12.00` |
 
-List every entity you need and its attributes. Decide on data types and which columns should be required. Think about what needs to be unique.
+**Business rules**
 
+- A slip belongs to one customer. A customer can have many slips.
+- A slip rents one or more pieces of gear. The same gear can appear on many slips over time, once per slip.
+- `days` is how long that gear was rented on that slip.
+- `daily_rate` is the gear's current catalog rate. It is the same fact wherever that gear appears. (It is not a historical price. If it were the rate actually charged, it would stay on the slip line, as `unit_price` does on `order_items`.)
+- The customer's name and email belong to the customer.
 
-> [!NOTE]
-> ***Your Answer***
->
-> *(Write your answer here.)*
->
->
->
->
+### 3.1 Anomalies
 
-### 2.2 Describe Relationships and Cardinalities
-
-For every relationship, state:
-- Which entities are involved
-- The cardinality (one-to-many, many-to-many)
-- Which side holds the foreign key (or whether you need a junction table)
-
-You can draw an ER diagram or describe the relationships in text — just be precise about cardinalities.
-
+Using the table above, give one insertion anomaly, one update anomaly, and one deletion anomaly.
 
 > [!NOTE]
 > ***Your Answer***
@@ -160,42 +239,9 @@ You can draw an ER diagram or describe the relationships in text — just be pre
 >
 >
 
-### 2.3 Write CREATE TABLE Statements
+### 3.2 First normal form
 
-Write complete `CREATE TABLE` statements for **all** tables. Here is a starting point to show the level of detail expected:
-
-```sql
-CREATE TABLE users (
-    user_id           SERIAL        PRIMARY KEY,
-    email             VARCHAR(255)  NOT NULL UNIQUE,
-    username          VARCHAR(50)   NOT NULL UNIQUE,
-    subscription_tier VARCHAR(10)   NOT NULL DEFAULT 'free'
-                      CHECK (subscription_tier IN ('free', 'premium', 'family')),
-    created_at        TIMESTAMPTZ   NOT NULL DEFAULT NOW()
-);
-```
-
-Now write the rest: `artists`, `artist_genres`, `albums`, `songs`, `playlists`, `playlist_songs`, `user_follows_artist`, and `play_history`.
-
-
-> [!NOTE]
-> ***Your Answer***
->
-> *(Write your answer here.)*
->
-
-
-
-
-### 2.4 Verify 3NF
-
-For each table, confirm it is in 3NF. Pay special attention to:
-- Did you put genres directly in the artists table as a comma-separated string? (That would violate 1NF.)
-- Does `songs` have any transitive dependencies?
-- Are your junction tables properly structured?
-
-
-
+Rewrite the data so the table is in 1NF. Show the rows, name the primary key, and say which 1NF rule the original `gear_list` column broke.
 
 > [!NOTE]
 > ***Your Answer***
@@ -206,16 +252,9 @@ For each table, confirm it is in 3NF. Pay special attention to:
 >
 >
 
-### 2.5 Add Constraints
+### 3.3 Second normal form
 
-Make sure every table has appropriate:
-- `PRIMARY KEY`
-- `FOREIGN KEY ... REFERENCES` with `ON DELETE` actions
-- `NOT NULL` on required columns
-- `CHECK` constraints (e.g., duration must be positive, track number must be positive)
-- `UNIQUE` where needed
-- `DEFAULT` values where sensible
-
+Name every partial dependency in the 1NF table. Split the table into 2NF tables and show their columns and primary keys.
 
 > [!NOTE]
 > ***Your Answer***
@@ -226,48 +265,38 @@ Make sure every table has appropriate:
 >
 >
 
-### 2.6 Define and Justify ON DELETE Actions
+### 3.4 Third normal form
 
-For every foreign key, choose an `ON DELETE` action and explain your reasoning. Consider:
+Name the transitive dependency that remains. Show the final 3NF tables. State the primary key of each table and where each foreign key goes.
 
-| FK Relationship | ON DELETE | Reasoning |
-|---|---|---|
-| `albums.artist_id → artists` | `CASCADE` or `RESTRICT`? | If an artist is deleted, should their albums disappear too, or should deletion be blocked? |
-| `songs.album_id → albums` | ? | Think about data integrity vs. cleanup |
-| `play_history.user_id → users` | ? | Should play history survive user deletion? |
-| `playlist_songs.song_id → songs` | ? | What happens to playlists when a song is removed? |
-
-There are no universally "correct" answers here — what matters is that you **think it through** and can defend your choice.
+> [!NOTE]
+> ***Your Answer***
+>
+> *(Write your answer here.)*
+>
+>
+>
+>
 
 ---
 
-## Optional Exercise 3 — Normalization Quick Test
+## Exercise 4 — TrailShop Self-Check
 
-For each table below, determine:
-1. What normal form is it currently in? (UNF, 1NF, 2NF, or 3NF)
+Use the checklist in Theory Section 7. You are checking the course schema, not inventing a new one.
 
-> [!NOTE]
-> ***Your Answer***
->
-> *(Write your answer here.)*
->
->
->
->
-2. What specific violation exists (if any)?
+### 4.1 Keys and relationships
 
-> [!NOTE]
-> ***Your Answer***
->
-> *(Write your answer here.)*
->
->
->
->
+Complete the table for the seven TrailShop tables.
 
-
-
-3. How would you fix it? Show the decomposed tables.
+| Table | Primary key | Foreign keys | Cardinality this table implements |
+| --- | --- | --- | --- |
+| `categories` | | | |
+| `customers` | | | |
+| `products` | | | |
+| `product_categories` | | | |
+| `orders` | | | |
+| `order_items` | | | |
+| `payments` | | | |
 
 > [!NOTE]
 > ***Your Answer***
@@ -278,20 +307,16 @@ For each table below, determine:
 >
 >
 
-### Table A
+### 4.2 Constraints and business rules
 
-```sql
-CREATE TABLE student_courses (
-    student_id   INT          NOT NULL,
-    student_name VARCHAR(100) NOT NULL,
-    courses      TEXT         NOT NULL,  -- e.g., 'Math, Physics, Chemistry'
-    PRIMARY KEY (student_id)
-);
-```
+Give the business rule enforced by each constraint.
 
-**Hint:** Look at the `courses` column. Does every cell contain a single atomic value?
-
-
+1. `CHECK (price > 0)` on `products`
+2. `UNIQUE (email)` on `customers`
+3. `CHECK (status IN ('pending', 'processing', 'shipped', 'delivered', 'cancelled'))` on `orders`
+4. `ON DELETE RESTRICT` on `orders.customer_id`
+5. `ON DELETE CASCADE` on `order_items.order_id`
+6. `UNIQUE (order_id)` on `payments`
 
 > [!NOTE]
 > ***Your Answer***
@@ -302,23 +327,9 @@ CREATE TABLE student_courses (
 >
 >
 
+### 4.3 Normalization check
 
-### Table B
-
-```sql
-CREATE TABLE order_items (
-    order_id     INT            NOT NULL,
-    product_id   INT            NOT NULL,
-    product_name VARCHAR(200)   NOT NULL,
-    unit_price   NUMERIC(10,2)  NOT NULL,
-    quantity     INT            NOT NULL,
-    PRIMARY KEY (order_id, product_id)
-);
-```
-
-**Hint:** The primary key is composite. Does `product_name` depend on the **whole** key or just part of it?
-
-
+For `product_categories` and `order_items`, state the primary key, whether any non-key column has a partial or transitive dependency, and why `unit_price` is in 3NF.
 
 > [!NOTE]
 > ***Your Answer***
@@ -328,213 +339,3 @@ CREATE TABLE order_items (
 >
 >
 >
-
-
-### Table C
-
-```sql
-CREATE TABLE employees (
-    employee_id     INT          PRIMARY KEY,
-    employee_name   VARCHAR(100) NOT NULL,
-    department_id   INT          NOT NULL,
-    department_name VARCHAR(100) NOT NULL
-);
-```
-
-**Hint:** Does `department_name` depend on `employee_id`, or does it really depend on `department_id`?
-
-
-
-> [!NOTE]
-> ***Your Answer***
->
-> *(Write your answer here.)*
->
->
->
->
-
-
-### Table D
-
-```sql
-CREATE TABLE categories (
-    category_id   SERIAL       PRIMARY KEY,
-    category_name VARCHAR(100) NOT NULL UNIQUE,
-    description   TEXT
-);
-```
-
-**Hint:** Every non-key column depends on the primary key and nothing else. Is there a violation?
-
-
-
-> [!NOTE]
-> ***Your Answer***
->
-> *(Write your answer here.)*
->
->
->
->
-
-
-### Table E
-
-```sql
-CREATE TABLE project_assignments (
-    project_id       INT           NOT NULL,
-    employee_id      INT           NOT NULL,
-    employee_name    VARCHAR(100)  NOT NULL,
-    employee_email   VARCHAR(255)  NOT NULL,
-    project_name     VARCHAR(200)  NOT NULL,
-    project_budget   NUMERIC(12,2) NOT NULL,
-    hours_worked     INT           NOT NULL,
-    PRIMARY KEY (project_id, employee_id)
-);
-```
-
-**Hint:** This table has more than one problem. Which columns depend on only part of the key? Are there any transitive dependencies?
-
-
-
-> [!NOTE]
-> ***Your Answer***
->
-> *(Write your answer here.)*
->
->
->
->
-
-
----
-
-## Optional Exercise 4 — Peer Review Practice
-
-Below is a schema for a **Library Management System**. It has **at least 8 intentional issues**. Your job is to find them all, explain why each is a problem, write constructive feedback, and then provide corrected `CREATE TABLE` statements.
-
-Use the **design quality checklist** from Theory Section 5 and the **peer review guidelines** from Theory Section 7.
-
-### The Flawed Schema
-
-```sql
-CREATE TABLE Books (
-    title          VARCHAR(300)   NOT NULL,
-    author_name    VARCHAR(200)   NOT NULL,
-    author_email   VARCHAR(255),
-    isbn           VARCHAR(13)    NOT NULL,
-    genre          VARCHAR(50),
-    price          VARCHAR(10),
-    total_copies   INT            NOT NULL DEFAULT 1,
-    available      INT            NOT NULL DEFAULT 1
-);
-
-CREATE TABLE members (
-    member_id    SERIAL        PRIMARY KEY,
-    full_name    VARCHAR(200)  NOT NULL,
-    email        VARCHAR(255)  NOT NULL,
-    phone        VARCHAR(20),
-    join_date    DATE          NOT NULL DEFAULT CURRENT_DATE
-);
-
-CREATE TABLE Loans (
-    loan_id      SERIAL         PRIMARY KEY,
-    book_title   VARCHAR(300)   NOT NULL,
-    member_id    INT            NOT NULL,
-    loan_date    DATE           NOT NULL DEFAULT CURRENT_DATE,
-    due_date     DATE           NOT NULL,
-    return_date  DATE
-);
-
-CREATE TABLE fines (
-    fine_id      SERIAL         PRIMARY KEY,
-    loan_id      INT            NOT NULL,
-    amount       NUMERIC(6,2)   NOT NULL,
-    paid         BOOLEAN        NOT NULL DEFAULT FALSE
-);
-```
-
-### 4.1 Review the Schema
-
-Go through the schema systematically. For each issue you find, note:
-- **What** the issue is
-- **Where** it is (which table, which column or missing element)
-- **Why** it is a problem
-- **How** to fix it
-
-Here are some categories to check:
-- Primary keys — does every table have one?
-- Foreign keys — are relationships properly linked?
-- Data types — is every column using an appropriate type?
-- Naming — are conventions consistent?
-- Normalization — is every table in 3NF?
-- Constraints — are business rules enforced?
-- ON DELETE — are cascading behaviors defined?
-- Derived data — is anything stored that could be calculated?
-
-
-
-
-> [!NOTE]
-> ***Your Answer***
->
-> *(Write your answer here.)*
->
->
->
->
-
-### 4.2 Write Constructive Feedback
-
-For each issue, write your feedback the way you would for a real peer review. Be specific, be kind, and explain the *why*. For example:
-
-> "The `Books` table is missing a primary key. Without one, PostgreSQL cannot uniquely identify rows and foreign keys cannot reference this table. I would add a `book_id SERIAL PRIMARY KEY` column."
-
-
-> [!NOTE]
-> ***Your Answer***
->
-> *(Write your answer here.)*
->
->
->
->
-
-### 4.3 Provide Corrected Statements
-
-Rewrite all four tables (and add any new tables needed) with every issue fixed. Make sure the corrected schema:
-- Uses consistent naming conventions
-- Has proper primary and foreign keys
-- Uses correct data types
-- Is in 3NF
-- Includes CHECK, UNIQUE, NOT NULL, and DEFAULT constraints where appropriate
-- Defines ON DELETE actions on all foreign keys
-
----
-
-
-> [!NOTE]
-> ***Your SQL***
->
-> ```sql
-> -- Write your query here
->
->
-> ```
-
-## Optional Self-Check
-
-Use this list to gauge your readiness for design questions on the final exam. You do not need to submit anything.
-
-- [ ] Documented your complete TrailShop schema with full CREATE TABLE statements
-- [ ] Created or updated your ER diagram
-- [ ] Verified 3NF for every table and documented any exceptions
-- [ ] Mapped every constraint to a business rule
-- [ ] Completed the self-review using the design quality checklist
-- [ ] Designed the full SoundWave schema with all required tables and constraints
-- [ ] Analyzed all five normalization tables and shown corrections
-- [ ] Found at least 8 issues in the library schema and provided fixes
-- [ ] Written constructive, specific peer review feedback
-
-Good luck with your exam preparation — you have built up all the skills you need. Trust the process and be thorough.

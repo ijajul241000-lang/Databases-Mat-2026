@@ -1,1005 +1,532 @@
 # Week 50 — Final Review: SQL
 
-> **Exam review week.** No new concepts and no required work. Use this chapter as a SQL quick-reference handbook while preparing for the final exam.
+> **Exam review week.** No new concepts and no required work. This chapter reviews the SQL you are expected to write, plus the fundamentals of transactions, indexes, and administration from Weeks 46–48.
 
 ## Chapter 14: "The SQL Reference"
 
-The TrailShop database you built over Weeks 36–48 is a fully functional system — tables, relationships, constraints, indexes, roles, transactions, and more. This week is your comprehensive SQL review. Think of it as a reference handbook you can flip through before the exam. Every SQL feature you've learned is collected here in one place, organized by topic, with syntax references and TrailShop examples.
+Week 49 reviewed how the TrailShop tables were designed. This week reviews how you query and protect them. Every example uses the current schema: categories and products meet in `product_categories`, and a line price is `order_items.unit_price`.
 
 ---
 
 ## Learning Objectives
 
-By the end of this chapter you will be able to:
+After this review you will be able to:
 
-- Recall the full PostgreSQL syntax for DDL, DML, and query operations
-- Use aggregation, joins, subqueries, and set operations fluently
-- Write CTEs, CASE expressions, and transaction blocks
-- Explain the logical query execution order
-- Follow a consistent SQL style guide
-- Identify when to use indexes and how to analyze query plans
-
----
-
-## 1. SQL Quick Reference by Topic
-
-This section is your master reference. Each subsection gives you the **syntax template**, **rules**, and a **TrailShop example**.
+- Write `CREATE TABLE`, `INSERT`, `UPDATE`, `DELETE`, and a basic `SELECT`
+- Filter, sort, limit, aggregate, group, and join rows, and explain the logical order of those clauses
+- Write a multi-table join, an outer join that keeps unmatched rows, a subquery, a view, and a CTE
+- Write a transaction with `COMMIT`, `ROLLBACK`, and `SAVEPOINT`, and name the ACID properties and the concurrency problems
+- Create an index, read a sequential scan and an index scan, and say when an index is a poor idea
+- Create a role, grant and revoke privileges, take a logical backup, and explain parameterized queries and the relational-versus-document choice
 
 ---
 
-### 1.1 DDL — Data Definition Language
+## How to Use This Chapter
 
-DDL commands define and modify the structure of your database objects.
+Each section is the syntax to practise and one TrailShop example. The exercises that follow use the same table and column names.
 
-> 📖 Watt & Eng, *Database Design — 2nd Edition*, Chapter 14: "SQL Data Definition"
+These topics were marked advanced in the weekly chapters. They are not the focus of this review, and the exercises do not ask for them: set operations (`UNION`, `INTERSECT`, `EXCEPT`), `CASE`, `COALESCE`, `NULLIF`, recursive CTEs, materialized views, window functions, join algorithms, point-in-time recovery, column-level privileges, and index types other than the B-tree you create with `CREATE INDEX`.
 
-#### CREATE TABLE
+---
+
+## The schema you are querying
+
+```
+categories(category_id PK, category_name UNIQUE, description)
+customers(customer_id PK, first_name, last_name, email UNIQUE, phone,
+          street, city, postal_code, country, registered_at)
+products(product_id PK, name, description, price, weight_kg,
+         stock_quantity, created_at)
+product_categories(product_id PK/FK, category_id PK/FK)
+orders(order_id PK, customer_id FK, order_date, status, shipping columns)
+order_items(order_id PK/FK, product_id PK/FK, quantity, unit_price)
+payments(payment_id PK, order_id UNIQUE FK, amount, payment_method, payment_date)
+```
+
+The product column is `name`. Stock is `stock_quantity`. Categories are reached through `product_categories`.
+
+---
+
+## 1. Week 40 — Creating and Changing Data
+
+### CREATE TABLE
+
+Define parent tables before the tables that reference them.
 
 ```sql
-CREATE TABLE table_name (
-    column_name data_type [constraints],
-    ...
-    [table_constraints]
+CREATE TABLE orders (
+    order_id    SERIAL       PRIMARY KEY,
+    customer_id INTEGER      NOT NULL
+                REFERENCES customers(customer_id)
+                ON DELETE RESTRICT
+                ON UPDATE CASCADE,
+    order_date  TIMESTAMPTZ  NOT NULL DEFAULT NOW(),
+    status      VARCHAR(20)  NOT NULL DEFAULT 'pending'
+                CHECK (status IN (
+                    'pending', 'processing', 'shipped',
+                    'delivered', 'cancelled'
+                ))
 );
 ```
 
-**Common column constraints:**
+Column constraints you should be able to use: `PRIMARY KEY`, `NOT NULL`, `UNIQUE`, `DEFAULT`, `CHECK`, and `REFERENCES`. A table-level constraint can be named: `CONSTRAINT orders_status_allowed CHECK (...)`.
 
-| Constraint | Meaning |
-|---|---|
-| `PRIMARY KEY` | Unique identifier for each row |
-| `NOT NULL` | Column cannot be empty |
-| `UNIQUE` | No duplicate values allowed |
-| `DEFAULT value` | Fallback value if none provided |
-| `CHECK (condition)` | Must satisfy a Boolean condition |
-| `REFERENCES table(col)` | Foreign key to another table |
-
-**TrailShop example:**
+### INSERT, UPDATE, DELETE
 
 ```sql
-CREATE TABLE products (
-    product_id    SERIAL PRIMARY KEY,
-    product_name  VARCHAR(200) NOT NULL,
-    category_id   INTEGER NOT NULL REFERENCES categories(category_id),
-    price         NUMERIC(10,2) NOT NULL CHECK (price > 0),
-    stock_qty     INTEGER NOT NULL DEFAULT 0 CHECK (stock_qty >= 0),
-    weight_kg     NUMERIC(5,2),
-    created_at    TIMESTAMP NOT NULL DEFAULT NOW()
-);
-```
+INSERT INTO products (name, price, stock_quantity)
+VALUES ('Ridge Tent', 249.00, 8);
 
-**Key rules:**
-- `SERIAL` is shorthand for an auto-incrementing integer with a sequence.
-- Table-level constraints let you name them: `CONSTRAINT chk_price CHECK (price > 0)`.
-- PostgreSQL supports `IF NOT EXISTS`: `CREATE TABLE IF NOT EXISTS ...`
-
-> 🔗 PostgreSQL docs: https://www.postgresql.org/docs/current/sql-createtable.html
-
-#### ALTER TABLE
-
-```sql
--- Add a column
-ALTER TABLE table_name ADD COLUMN column_name data_type [constraints];
-
--- Drop a column
-ALTER TABLE table_name DROP COLUMN column_name [CASCADE];
-
--- Rename a column
-ALTER TABLE table_name RENAME COLUMN old_name TO new_name;
-
--- Change data type
-ALTER TABLE table_name ALTER COLUMN column_name TYPE new_data_type;
-
--- Add a constraint
-ALTER TABLE table_name ADD CONSTRAINT constraint_name constraint_definition;
-
--- Drop a constraint
-ALTER TABLE table_name DROP CONSTRAINT constraint_name;
-
--- Set/drop default
-ALTER TABLE table_name ALTER COLUMN column_name SET DEFAULT value;
-ALTER TABLE table_name ALTER COLUMN column_name DROP DEFAULT;
-
--- Set/drop NOT NULL
-ALTER TABLE table_name ALTER COLUMN column_name SET NOT NULL;
-ALTER TABLE table_name ALTER COLUMN column_name DROP NOT NULL;
-```
-
-**TrailShop example:**
-
-```sql
--- Add a description column to products
-ALTER TABLE products ADD COLUMN description TEXT;
-
--- Add a unique constraint on product names within a category
-ALTER TABLE products
-    ADD CONSTRAINT uq_product_name_category UNIQUE (product_name, category_id);
-
--- Change stock_qty to allow larger numbers
-ALTER TABLE products ALTER COLUMN stock_qty TYPE BIGINT;
-```
-
-> 🔗 PostgreSQL docs: https://www.postgresql.org/docs/current/sql-altertable.html
-
-#### DROP TABLE
-
-```sql
-DROP TABLE [IF EXISTS] table_name [CASCADE | RESTRICT];
-```
-
-- `CASCADE` removes dependent objects (foreign keys, views).
-- `RESTRICT` (default) refuses if dependencies exist.
-
-```sql
--- Remove the old reviews table
-DROP TABLE IF EXISTS product_reviews CASCADE;
-```
-
-> 🔗 PostgreSQL docs: https://www.postgresql.org/docs/current/sql-droptable.html
-
----
-
-### 1.2 DML — Data Manipulation Language
-
-DML commands modify the data stored in tables.
-
-> 📖 Watt & Eng, Chapter 15: "SQL Data Manipulation"
-
-#### INSERT
-
-```sql
--- Single row
-INSERT INTO table_name (col1, col2, ...)
-VALUES (val1, val2, ...);
-
--- Multiple rows
-INSERT INTO table_name (col1, col2, ...)
+INSERT INTO products (name, price)
 VALUES
-    (val1a, val2a, ...),
-    (val1b, val2b, ...),
-    (val1c, val2c, ...);
+    ('Stove', 49.00),
+    ('Sleeping Bag', 89.00);
 
--- Insert from a query
-INSERT INTO table_name (col1, col2)
-SELECT colA, colB FROM other_table WHERE condition;
-
--- Returning inserted data
-INSERT INTO table_name (col1, col2)
-VALUES (val1, val2)
-RETURNING *;
-```
-
-**TrailShop example:**
-
-```sql
-INSERT INTO categories (category_name, description)
-VALUES
-    ('Hiking', 'Boots, poles, and accessories for trail hiking'),
-    ('Climbing', 'Ropes, harnesses, and carabiners'),
-    ('Camping', 'Tents, sleeping bags, and cookware')
-RETURNING category_id, category_name;
-```
-
-**Common patterns:**
-- Use `RETURNING` to get generated IDs back immediately.
-- Use `ON CONFLICT` for upserts:
-
-```sql
-INSERT INTO products (product_id, product_name, price)
-VALUES (1, 'TrailMaster X4', 159.99)
-ON CONFLICT (product_id)
-DO UPDATE SET price = EXCLUDED.price;
-```
-
-> 🔗 PostgreSQL docs: https://www.postgresql.org/docs/current/sql-insert.html
-
-#### UPDATE
-
-```sql
-UPDATE table_name
-SET col1 = value1,
-    col2 = value2
-WHERE condition
-RETURNING *;
-```
-
-**TrailShop example:**
-
-```sql
--- 10% price increase for all climbing gear
 UPDATE products
-SET price = price * 1.10,
-    updated_at = NOW()
-WHERE category_id = (SELECT category_id FROM categories WHERE category_name = 'Climbing')
-RETURNING product_name, price;
-```
+SET price = price * 1.10
+WHERE product_id = 10;
 
-**Rules:**
-- Always include a `WHERE` clause unless you intentionally want to update every row.
-- You can use subqueries in the `SET` clause or `WHERE` clause.
-- `RETURNING` shows what was modified.
-
-> 🔗 PostgreSQL docs: https://www.postgresql.org/docs/current/sql-update.html
-
-#### DELETE
-
-```sql
-DELETE FROM table_name
-WHERE condition
-RETURNING *;
-```
-
-**TrailShop example:**
-
-```sql
--- Remove discontinued products with zero stock
 DELETE FROM products
-WHERE stock_qty = 0 AND discontinued = TRUE
-RETURNING product_id, product_name;
+WHERE product_id = 10;
 ```
 
-**Rules:**
-- Without `WHERE`, all rows are deleted (use `TRUNCATE` for faster full-table deletion).
-- Foreign key constraints may block deletion — use `ON DELETE CASCADE` or delete child rows first.
+`INSERT` lists the columns it fills. Omitted columns must have a default or allow `NULL`. `SERIAL` fills the primary key. `UPDATE` and `DELETE` change every row that matches `WHERE`. Without `WHERE` they change every row in the table.
 
-> 🔗 PostgreSQL docs: https://www.postgresql.org/docs/current/sql-delete.html
+A single statement is already its own transaction (autocommit). Open an explicit transaction, reviewed in Section 5, when several statements must succeed or fail together.
+
+String literals use single quotes: `'pending'`. Double quotes name an identifier, such as a column that needs quoting. They do not make a string.
+
+### A basic SELECT
+
+```sql
+SELECT name, price
+FROM products
+WHERE price > 100;
+```
+
+### Common mistake
+
+Running `UPDATE` or `DELETE` before you have written, and read, the `WHERE` clause.
 
 ---
 
-### 1.3 Queries — SELECT Statements
+## 2. Week 41 — Queries
 
-The `SELECT` statement is the most powerful and frequently used SQL command.
-
-> 📖 Watt & Eng, Chapter 15: "Retrieval Queries in SQL"
-
-#### Basic Syntax
+### Filtering, sorting, and limiting
 
 ```sql
-SELECT [DISTINCT] column_list | *
-FROM table_name [alias]
-[WHERE condition]
-[ORDER BY column [ASC|DESC]]
-[LIMIT n]
-[OFFSET m];
-```
-
-#### WHERE Operators
-
-| Operator | Example |
-|---|---|
-| `=`, `!=`, `<>` | `price = 49.99` |
-| `<`, `>`, `<=`, `>=` | `stock_qty > 0` |
-| `BETWEEN ... AND ...` | `price BETWEEN 50 AND 100` |
-| `IN (list)` | `category_id IN (1, 2, 3)` |
-| `LIKE` / `ILIKE` | `product_name ILIKE '%trail%'` |
-| `IS NULL` / `IS NOT NULL` | `description IS NOT NULL` |
-| `AND`, `OR`, `NOT` | `price > 50 AND stock_qty > 0` |
-
-#### ORDER BY
-
-```sql
--- Multiple columns, mixed directions
-SELECT product_name, price, stock_qty
+SELECT name, price, stock_quantity
 FROM products
-ORDER BY price DESC, product_name ASC;
+WHERE price BETWEEN 50 AND 150
+  AND stock_quantity > 0
+  AND name ILIKE '%tent%'
+ORDER BY price DESC
+LIMIT 10 OFFSET 0;
 ```
 
-- You can order by column position: `ORDER BY 2 DESC` (second column).
-- `NULLS FIRST` / `NULLS LAST` controls NULL ordering.
+| Operator | Use |
+| --- | --- |
+| `=`, `<>`, `<`, `>`, `<=`, `>=` | Compare values |
+| `AND`, `OR`, `NOT` | Combine conditions. `AND` is applied before `OR`. Use parentheses when you mix them |
+| `BETWEEN` | Inclusive range |
+| `IN ( ... )` | Match any value in a list |
+| `LIKE` | Pattern. `%` is any sequence, `_` is one character. `LIKE` is case-sensitive |
+| `ILIKE` | The same patterns, case-insensitive. This is a PostgreSQL extension used in the course |
+| `IS NULL`, `IS NOT NULL` | Test for a missing value |
 
-#### LIMIT and OFFSET
+`ORDER BY` accepts several columns. `LIMIT` stops after that many rows. `OFFSET` skips rows. A page of 10 rows, page numbering from 1, uses `LIMIT 10 OFFSET (page_number - 1) * 10`.
+
+`DISTINCT` removes duplicate result rows. A join to a "many" table produces one result row per match, so a product in two categories appears twice unless the query aggregates or uses `DISTINCT`.
+
+### Aggregates, GROUP BY, and HAVING
 
 ```sql
--- Page 3 of results (10 per page)
-SELECT product_name, price
-FROM products
-ORDER BY product_name
-LIMIT 10 OFFSET 20;
+SELECT c.category_name,
+       COUNT(*) AS product_count,
+       AVG(p.price) AS avg_price
+FROM categories c
+JOIN product_categories pc ON pc.category_id = c.category_id
+JOIN products p ON p.product_id = pc.product_id
+GROUP BY c.category_id, c.category_name
+HAVING AVG(p.price) > 100
+ORDER BY avg_price DESC;
 ```
 
-- Always use `ORDER BY` with `LIMIT`/`OFFSET` for deterministic results.
+`COUNT`, `SUM`, `AVG`, `MIN`, and `MAX` compute one value from many rows. Aggregates skip `NULL`, except that `COUNT(*)` counts rows. Every column in the `SELECT` list that is not inside an aggregate belongs in the `GROUP BY`.
 
-> 🔗 PostgreSQL docs: https://www.postgresql.org/docs/current/sql-select.html
+### Joins
 
----
-
-### 1.4 Aggregation
-
-Aggregate functions compute a single result from a set of rows.
-
-> 📖 Watt & Eng, Chapter 15: "Aggregate Functions and Grouping"
-
-#### Aggregate Functions
-
-| Function | Purpose | NULL handling |
-|---|---|---|
-| `COUNT(*)` | Count all rows | Counts NULLs |
-| `COUNT(col)` | Count non-NULL values | Ignores NULLs |
-| `COUNT(DISTINCT col)` | Count unique non-NULL values | Ignores NULLs |
-| `SUM(col)` | Total of numeric values | Ignores NULLs |
-| `AVG(col)` | Average of numeric values | Ignores NULLs |
-| `MIN(col)` | Smallest value | Ignores NULLs |
-| `MAX(col)` | Largest value | Ignores NULLs |
-
-#### GROUP BY
+| Join | Result |
+| --- | --- |
+| `INNER JOIN` | Only rows with a match on both sides |
+| `LEFT JOIN` | Every row from the left table. Unmatched right-hand columns are `NULL` |
+| `RIGHT JOIN` | Every row from the right table |
+| `FULL OUTER JOIN` | Every row from both tables |
+| `CROSS JOIN` | Every combination of the two tables |
 
 ```sql
-SELECT category_id, COUNT(*) AS product_count, AVG(price) AS avg_price
-FROM products
-GROUP BY category_id;
-```
-
-**Rules:**
-- Every column in `SELECT` must either be in `GROUP BY` or inside an aggregate function.
-- You can group by multiple columns: `GROUP BY category_id, supplier_id`.
-
-#### HAVING
-
-```sql
--- Categories with more than 5 products
-SELECT category_id, COUNT(*) AS product_count
-FROM products
-GROUP BY category_id
-HAVING COUNT(*) > 5;
-```
-
-**WHERE vs HAVING:**
-- `WHERE` filters individual rows *before* grouping.
-- `HAVING` filters groups *after* aggregation.
-
-**TrailShop example:**
-
-```sql
--- Find customers who spent more than €500 total
-SELECT c.customer_id, c.first_name, c.last_name,
-       SUM(oi.quantity * oi.unit_price) AS total_spent
+SELECT c.first_name, c.last_name, o.order_id, o.status
 FROM customers c
-JOIN orders o ON c.customer_id = o.customer_id
-JOIN order_items oi ON o.order_id = oi.order_id
-GROUP BY c.customer_id, c.first_name, c.last_name
-HAVING SUM(oi.quantity * oi.unit_price) > 500
-ORDER BY total_spent DESC;
+LEFT JOIN orders o ON o.customer_id = c.customer_id;
 ```
 
-> 🔗 PostgreSQL docs: https://www.postgresql.org/docs/current/functions-aggregate.html
+The `ON` clause states how the rows match. Table aliases (`c`, `o`) keep multi-table queries readable. Joining three or more tables is a chain of the same pattern: customers to orders, orders to `order_items`, `order_items` to products.
+
+### Common mistake
+
+Using `INNER JOIN` when the question asks for rows with no match, such as categories with no products. An inner join drops those categories. A left join keeps them, and `WHERE p.product_id IS NULL` keeps only the unmatched ones.
 
 ---
 
-### 1.5 Joins
+## 3. Logical Query Order
 
-Joins combine rows from two or more tables based on a related column.
+The clauses are written in one order and applied in another:
 
-> 📖 Watt & Eng, Chapter 15: "Join Operations"
+```
+FROM  →  WHERE  →  GROUP BY  →  HAVING  →  SELECT  →  ORDER BY  →  LIMIT
+```
 
-#### Join Types Comparison
-
-| Join Type | Returns | Use When |
-|---|---|---|
-| `INNER JOIN` | Only matching rows from both tables | You only want rows that have a match |
-| `LEFT JOIN` | All rows from left + matches from right | You want all left rows, even without matches |
-| `RIGHT JOIN` | All rows from right + matches from left | Rarely used — rewrite as LEFT JOIN |
-| `FULL OUTER JOIN` | All rows from both, NULLs where no match | You need a complete picture of both sides |
-| `CROSS JOIN` | Cartesian product (every combination) | Generating combinations, test data |
-
-#### Syntax
+This order is why an aggregate cannot appear in `WHERE`. Grouping has not happened yet, so there is no group to aggregate. Filter rows in `WHERE`. Filter groups in `HAVING`.
 
 ```sql
--- INNER JOIN
-SELECT p.product_name, c.category_name
-FROM products p
-INNER JOIN product_categories pc ON pc.product_id = p.product_id
-INNER JOIN categories c ON c.category_id = pc.category_id;
+-- Rows first, then groups
+SELECT c.category_name, COUNT(*) AS product_count
+FROM categories c
+JOIN product_categories pc ON pc.category_id = c.category_id
+JOIN products p ON p.product_id = pc.product_id
+WHERE p.price > 50
+GROUP BY c.category_id, c.category_name
+HAVING COUNT(*) >= 3;
+```
 
--- LEFT JOIN
-SELECT c.category_name, p.product_name
+A column alias created in `SELECT` is not available in `WHERE`, because `WHERE` runs first. Repeat the expression, or filter later with `HAVING` when the value is an aggregate.
+
+### Common mistake
+
+`WHERE COUNT(*) > 5`. Move the condition to `HAVING COUNT(*) > 5`.
+
+---
+
+## 4. Week 44 — Joins, Subqueries, Views, and CTEs
+
+This section is the fundamental part of Week 44. Set operations and conditional expressions were marked advanced and are not practised here.
+
+### Multi-table joins and the unmatched-row pattern
+
+```sql
+SELECT c.category_name, p.name
 FROM categories c
 LEFT JOIN product_categories pc ON pc.category_id = c.category_id
-LEFT JOIN products p ON p.product_id = pc.product_id;
-
--- RIGHT JOIN
-SELECT p.product_name, s.supplier_name
-FROM products p
-RIGHT JOIN suppliers s ON p.supplier_id = s.supplier_id;
-
--- FULL OUTER JOIN
-SELECT c.customer_id, o.order_id
-FROM customers c
-FULL OUTER JOIN orders o ON c.customer_id = o.customer_id;
-
--- CROSS JOIN
-SELECT s.size_label, co.color_name
-FROM sizes s
-CROSS JOIN colors co;
+LEFT JOIN products p ON p.product_id = pc.product_id
+ORDER BY c.category_name, p.name;
 ```
 
-#### Multiple Joins
+Both joins are left joins. A later inner join would drop the unmatched categories that the first left join had kept.
+
+A **self-join** uses the same table twice under two aliases. It answers questions such as "which customers live in the same city?":
 
 ```sql
-SELECT o.order_id, c.first_name, p.product_name, oi.quantity
-FROM orders o
-JOIN customers c ON o.customer_id = c.customer_id
-JOIN order_items oi ON o.order_id = oi.order_id
-JOIN products p ON oi.product_id = p.product_id
-WHERE o.order_date >= '2026-01-01'
-ORDER BY o.order_date DESC;
+SELECT a.customer_id, b.customer_id, a.city
+FROM customers a
+JOIN customers b
+  ON a.city = b.city
+ AND a.customer_id < b.customer_id;
 ```
 
-#### Self Join
+`a.customer_id < b.customer_id` keeps each pair once and leaves out a customer matched with themselves.
+
+### Subqueries
+
+A subquery is a query inside another query.
 
 ```sql
--- Products in the same category (find related products)
-SELECT a.product_name AS product, b.product_name AS related_product
-FROM products a
-JOIN products b ON a.category_id = b.category_id AND a.product_id < b.product_id;
-```
-
-> 🔗 PostgreSQL docs: https://www.postgresql.org/docs/current/queries-table-expressions.html#QUERIES-JOIN
-
----
-
-### 1.6 Subqueries
-
-A subquery is a query nested inside another query.
-
-> 📖 Watt & Eng, Chapter 15: "Nested Queries / Subqueries"
-
-#### Types of Subqueries
-
-| Type | Returns | Used In |
-|---|---|---|
-| Scalar | Single value | `SELECT`, `WHERE`, `HAVING` |
-| Row | Single row | `WHERE` with row comparison |
-| Table | Multiple rows/columns | `FROM`, `IN`, `EXISTS` |
-| Correlated | References outer query | `WHERE`, `SELECT` |
-
-#### Scalar Subquery
-
-```sql
--- Products priced above average
-SELECT product_name, price
+-- Scalar: one value, compared in WHERE
+SELECT name, price
 FROM products
 WHERE price > (SELECT AVG(price) FROM products);
-```
 
-#### IN / NOT IN
+-- IN: the product has at least one category
+SELECT name
+FROM products
+WHERE product_id IN (SELECT product_id FROM product_categories);
 
-```sql
--- Customers who have placed orders
-SELECT first_name, last_name
-FROM customers
-WHERE customer_id IN (SELECT DISTINCT customer_id FROM orders);
-```
-
-#### EXISTS / NOT EXISTS
-
-```sql
--- Categories that have at least one product
-SELECT category_name
-FROM categories c
+-- EXISTS: the product appears on at least one order line
+SELECT name
+FROM products p
 WHERE EXISTS (
-    SELECT 1 FROM product_categories pc WHERE pc.category_id = c.category_id
+    SELECT 1
+    FROM order_items oi
+    WHERE oi.product_id = p.product_id
 );
 
--- Customers who have never ordered
-SELECT first_name, last_name
+-- NOT EXISTS: customers with no orders
+SELECT c.first_name, c.last_name
 FROM customers c
 WHERE NOT EXISTS (
-    SELECT 1 FROM orders o WHERE o.customer_id = c.customer_id
-);
-```
-
-#### ANY / ALL
-
-```sql
--- Products cheaper than ALL climbing gear
-SELECT product_name, price
-FROM products
-WHERE price < ALL (
-    SELECT price FROM products
-    WHERE category_id = (SELECT category_id FROM categories WHERE category_name = 'Climbing')
-);
-
--- Products cheaper than ANY climbing gear (at least one)
-SELECT product_name, price
-FROM products
-WHERE price < ANY (
-    SELECT price FROM products
-    WHERE category_id = (SELECT category_id FROM categories WHERE category_name = 'Climbing')
-);
-```
-
-#### Correlated Subquery
-
-```sql
--- For each product, show how its price compares to category average
-SELECT product_name, price,
-       (SELECT AVG(p2.price) FROM products p2 WHERE p2.category_id = p.category_id) AS category_avg
-FROM products p;
-```
-
-> 🔗 PostgreSQL docs: https://www.postgresql.org/docs/current/functions-subquery.html
-
----
-
-### 1.7 Set Operations
-
-Set operations combine results from two or more queries.
-
-> 📖 Watt & Eng, Chapter 15: "Set Operations"
-
-#### Syntax
-
-```sql
-query1 UNION [ALL] query2
-query1 INTERSECT [ALL] query2
-query1 EXCEPT [ALL] query2
-```
-
-#### Rules
-
-- Both queries must return the **same number of columns**.
-- Corresponding columns must have **compatible data types**.
-- Without `ALL`, duplicates are removed (like `DISTINCT`).
-- Column names come from the **first** query.
-- Use `ORDER BY` only at the very end (applies to the combined result).
-
-#### Examples
-
-```sql
--- All people (customers and employees) in one list
-SELECT first_name, last_name, 'Customer' AS role FROM customers
-UNION
-SELECT first_name, last_name, 'Employee' AS role FROM employees
-ORDER BY last_name;
-
--- Customers who are also employees
-SELECT first_name, last_name FROM customers
-INTERSECT
-SELECT first_name, last_name FROM employees;
-
--- Customers who are NOT employees
-SELECT first_name, last_name FROM customers
-EXCEPT
-SELECT first_name, last_name FROM employees;
-```
-
-> 🔗 PostgreSQL docs: https://www.postgresql.org/docs/current/queries-union.html
-
----
-
-### 1.8 Conditional Expressions
-
-#### CASE
-
-```sql
--- Simple CASE
-SELECT product_name,
-    CASE category_id
-        WHEN 1 THEN 'Hiking'
-        WHEN 2 THEN 'Climbing'
-        WHEN 3 THEN 'Camping'
-        ELSE 'Other'
-    END AS category_label
-FROM products;
-
--- Searched CASE
-SELECT product_name, price,
-    CASE
-        WHEN price >= 200 THEN 'Premium'
-        WHEN price >= 100 THEN 'Mid-range'
-        WHEN price >= 50  THEN 'Budget'
-        ELSE 'Bargain'
-    END AS price_tier
-FROM products;
-```
-
-#### COALESCE
-
-Returns the first non-NULL argument:
-
-```sql
-SELECT product_name, COALESCE(description, 'No description available') AS description
-FROM products;
-```
-
-#### NULLIF
-
-Returns NULL if both arguments are equal:
-
-```sql
--- Avoid division by zero
-SELECT product_name, total_revenue / NULLIF(total_orders, 0) AS revenue_per_order
-FROM product_stats;
-```
-
-> 🔗 PostgreSQL docs: https://www.postgresql.org/docs/current/functions-conditional.html
-
----
-
-### 1.9 Views
-
-A view is a stored query that behaves like a virtual table.
-
-> 📖 Watt & Eng, Chapter 16: "Database Views"
-
-```sql
-CREATE [OR REPLACE] VIEW view_name AS
-SELECT ...;
-```
-
-**TrailShop example:**
-
-```sql
-CREATE OR REPLACE VIEW v_product_catalog AS
-SELECT p.product_id, p.product_name, c.category_name,
-       p.price, p.stock_qty,
-       CASE WHEN p.stock_qty > 0 THEN 'In Stock' ELSE 'Out of Stock' END AS availability
-FROM products p
-JOIN product_categories pc ON pc.product_id = p.product_id
-JOIN categories c ON c.category_id = pc.category_id;
-```
-
-**Benefits:**
-- Simplifies complex queries for application code.
-- Provides a security layer (expose only certain columns).
-- Encapsulates business logic.
-
-**Limitations:**
-- Not all views are updatable (those with joins, aggregates, DISTINCT are read-only by default).
-- No performance gain by default — the underlying query still runs each time.
-
-```sql
--- Using a view
-SELECT * FROM v_product_catalog WHERE category_name = 'Hiking';
-
--- Drop a view
-DROP VIEW IF EXISTS v_product_catalog;
-```
-
-> 🔗 PostgreSQL docs: https://www.postgresql.org/docs/current/sql-createview.html
-
----
-
-### 1.10 CTEs — Common Table Expressions
-
-CTEs let you define temporary named result sets within a query using the `WITH` clause.
-
-> 📖 Watt & Eng, Chapter 15: "Common Table Expressions"
-
-```sql
-WITH cte_name AS (
-    SELECT ...
-)
-SELECT ... FROM cte_name;
-```
-
-#### Chaining CTEs
-
-```sql
-WITH monthly_sales AS (
-    SELECT DATE_TRUNC('month', o.order_date) AS month,
-           SUM(oi.quantity * oi.unit_price) AS revenue
+    SELECT 1
     FROM orders o
-    JOIN order_items oi ON o.order_id = oi.order_id
-    GROUP BY DATE_TRUNC('month', o.order_date)
-),
-ranked_months AS (
-    SELECT month, revenue,
-           RANK() OVER (ORDER BY revenue DESC) AS rank
-    FROM monthly_sales
+    WHERE o.customer_id = c.customer_id
+);
+```
+
+A **correlated** subquery refers to a column from the outer query. The `EXISTS` example above is correlated: `oi.product_id = p.product_id` uses the outer `p`. A join is often clearer for the same question. Use the form you can explain.
+
+### Views
+
+A view is a stored `SELECT`. Querying the view runs that `SELECT`.
+
+```sql
+CREATE VIEW customer_orders AS
+SELECT c.customer_id,
+       c.first_name,
+       c.last_name,
+       o.order_id,
+       o.order_date,
+       o.status
+FROM customers c
+JOIN orders o ON o.customer_id = c.customer_id;
+
+-- Later
+SELECT * FROM customer_orders WHERE status = 'pending';
+
+DROP VIEW customer_orders;
+```
+
+`CREATE OR REPLACE VIEW` changes the query when the column list stays compatible. A view of one table, without aggregates or joins, can be updatable. `WITH CHECK OPTION` rejects an update that would make the row fall outside the view's `WHERE`.
+
+### Common table expressions
+
+A CTE names a query with `WITH`, then uses that name. Several CTEs are separated by commas. The result is the same as a subquery in `FROM`, and the name makes the steps easier to read.
+
+```sql
+WITH customer_spend AS (
+    SELECT o.customer_id,
+           SUM(oi.quantity * oi.unit_price) AS total_spent
+    FROM orders o
+    JOIN order_items oi ON oi.order_id = o.order_id
+    GROUP BY o.customer_id
 )
-SELECT month, revenue, rank
-FROM ranked_months
-WHERE rank <= 3;
+SELECT c.first_name, c.last_name, s.total_spent
+FROM customer_spend s
+JOIN customers c ON c.customer_id = s.customer_id
+WHERE s.total_spent > 200
+ORDER BY s.total_spent DESC;
 ```
 
-**Benefits of CTEs:**
-- Improve readability of complex queries.
-- Allow step-by-step logic.
-- Can be referenced multiple times in the main query.
-- Recursive CTEs support hierarchical data (e.g., category trees).
+Revenue uses `quantity * unit_price` from the order line. It does not use today's `products.price`.
 
-> 🔗 PostgreSQL docs: https://www.postgresql.org/docs/current/queries-with.html
+### Common mistake
+
+Forgetting that `NOT EXISTS` keeps the outer rows that have no match. An inner join drops those rows before the outer query can test them.
 
 ---
 
-### 1.11 Transactions
+## 5. Week 46 — Transactions and Concurrency
 
-A transaction groups multiple SQL statements into an atomic unit.
+### One unit of work
 
-> 📖 Watt & Eng, Chapter 16: "Transactions and Concurrency"
-
-```sql
-BEGIN;
-    -- statements here
-COMMIT;
--- or ROLLBACK; to undo
-```
-
-#### SAVEPOINT
+A **transaction** is a group of statements that succeed together or leave the database unchanged. Placing an order is one unit of work: insert the order, insert the lines, and decrease stock.
 
 ```sql
 BEGIN;
-    INSERT INTO orders (customer_id, order_date) VALUES (1, NOW());
 
-    SAVEPOINT before_items;
+INSERT INTO orders (customer_id)
+VALUES (1);
 
-    INSERT INTO order_items (order_id, product_id, quantity, unit_price)
-    VALUES (currval('orders_order_id_seq'), 5, 2, 89.99);
+INSERT INTO order_items (order_id, product_id, quantity, unit_price)
+VALUES (50, 10, 1, 249.00);
 
-    -- Oops, wrong product — roll back just the item
-    ROLLBACK TO SAVEPOINT before_items;
-
-    INSERT INTO order_items (order_id, product_id, quantity, unit_price)
-    VALUES (currval('orders_order_id_seq'), 7, 2, 89.99);
+UPDATE products
+SET stock_quantity = stock_quantity - 1
+WHERE product_id = 10;
 
 COMMIT;
 ```
 
-**ACID properties:**
-- **Atomicity** — all or nothing
-- **Consistency** — database stays valid
-- **Isolation** — concurrent transactions don't interfere
-- **Durability** — committed data survives crashes
+`ROLLBACK` undoes every change since `BEGIN`. `SAVEPOINT` marks a point inside the transaction. `ROLLBACK TO SAVEPOINT` undoes only what happened after that mark. The rest of the transaction can still be committed.
 
-> 🔗 PostgreSQL docs: https://www.postgresql.org/docs/current/tutorial-transactions.html
+```sql
+BEGIN;
+INSERT INTO orders (customer_id) VALUES (1);
+SAVEPOINT order_saved;
+UPDATE products
+SET stock_quantity = stock_quantity - 1
+WHERE product_id = 10;
+-- The stock change was the wrong product. Keep the order, undo the update.
+ROLLBACK TO SAVEPOINT order_saved;
+COMMIT;
+```
+
+In a real session the new `order_id` comes from `INSERT ... RETURNING order_id`. The number `50` above stands in for that value.
+
+### ACID
+
+| Property | Meaning | If it fails |
+| --- | --- | --- |
+| Atomicity | All of the statements are kept, or none are | A crash after the stock update and before `COMMIT` leaves the order unrecorded and the stock unchanged |
+| Consistency | The transaction moves the database from one valid state to another. Constraints hold | A line with `quantity` 0 is rejected by `CHECK` |
+| Isolation | Concurrent transactions do not see each other's uncommitted work | Two sessions can overwrite each other's stock count |
+| Durability | After `COMMIT` returns, the change survives a crash. PostgreSQL writes the change before it confirms the commit | A committed order is still there when the server starts again |
+
+### Concurrency
+
+| Problem | What the second session sees or does |
+| --- | --- |
+| Dirty read | A row another transaction has changed and not committed. PostgreSQL never allows this |
+| Non-repeatable read | The same row read twice in one transaction has different committed values |
+| Phantom read | A second read of the same condition returns a new committed row |
+| Lost update | Two transactions read a stock value and each write their own result, so one decrease disappears |
+
+**Isolation levels.** `READ COMMITTED` is PostgreSQL's default: a statement sees only data committed before that statement starts. Setting `READ UNCOMMITTED` in PostgreSQL still behaves as `READ COMMITTED`. `REPEATABLE READ` keeps one snapshot for the whole transaction, and in PostgreSQL it also prevents phantom reads. `SERIALIZABLE` is the strictest level.
+
+```sql
+BEGIN;
+SET TRANSACTION ISOLATION LEVEL REPEATABLE READ;
+-- statements
+COMMIT;
+```
+
+A writer locks the row it changes until `COMMIT` or `ROLLBACK`. `SELECT ... FOR UPDATE` takes that lock when you intend to update the row, which stops a lost update of `stock_quantity`. A plain `SELECT` still reads while a row is locked, because PostgreSQL keeps more than one version of a row. That idea is MVCC: readers do not block writers, and writers do not block readers.
+
+A **deadlock** is two transactions each waiting for a lock the other holds. PostgreSQL aborts one of them. The application retries. Locking rows in a consistent order, and keeping transactions short, avoids the usual case.
+
+### Common mistake
+
+Decreasing stock in a separate autocommit statement from the order insert. A failure between the two statements leaves an order with no stock change, or a stock change with no order.
 
 ---
 
-### 1.12 Indexes
+## 6. Week 47 — Indexes and Plans
 
-Indexes speed up data retrieval at the cost of extra storage and slower writes.
+### What an index is
 
-> 📖 Watt & Eng, Chapter 16: "Indexing"
+Without an index, PostgreSQL reads the table from the start until it has checked the relevant rows. That **sequential scan** grows with the number of rows. An **index** is a separate structure that maps values to the rows that hold them. The default index is a **B-tree**. A lookup in a B-tree grows much more slowly than a full read of the table: on the order of a few dozen steps for a million rows, rather than a million comparisons.
 
 ```sql
--- Create an index
-CREATE INDEX idx_product_categories_category ON product_categories(category_id);
-
--- Unique index
-CREATE UNIQUE INDEX idx_products_name_cat ON products(product_name, category_id);
-
--- Partial index (only index rows meeting a condition)
-CREATE INDEX idx_products_in_stock ON products(product_id) WHERE stock_qty > 0;
-
--- Drop an index
-DROP INDEX IF EXISTS idx_product_categories_category;
+CREATE INDEX idx_orders_customer_id
+    ON orders (customer_id);
 ```
 
-#### EXPLAIN ANALYZE
+PostgreSQL creates an index for a primary key and for a `UNIQUE` constraint. It does **not** create an index merely because a column is a foreign key. `orders.customer_id` needs the index above if you look up one customer's orders in a large table.
+
+A composite index such as the primary key (`product_id`, `category_id`) supports a lookup that starts with `product_id`. A lookup that starts with `category_id` needs its own index. TrailShop already has that second index: `idx_product_categories_category_id`.
+
+### Reading a plan
+
+`EXPLAIN` shows the plan PostgreSQL expects to use, including the estimated cost and row count. `EXPLAIN ANALYZE` runs the statement and adds the actual time and row count. `EXPLAIN ANALYZE` on `INSERT`, `UPDATE`, or `DELETE` really changes the data.
+
+| Plan line | Meaning |
+| --- | --- |
+| Seq Scan | The table is read from the start |
+| Index Scan | The index finds the matching rows, then the table supplies the other columns |
+| Index Only Scan | The index itself contains every column the query needs |
 
 ```sql
 EXPLAIN ANALYZE
-SELECT product_name, price
-FROM products
-WHERE category_id = 2 AND price > 100;
+SELECT order_id, order_date
+FROM orders
+WHERE customer_id = 1;
 ```
 
-This shows:
-- The query plan (Seq Scan vs Index Scan)
-- Estimated vs actual rows
-- Execution time in milliseconds
+Before the index, a large `orders` table shows a sequential scan with a filter on `customer_id`. After `idx_orders_customer_id`, the plan can show an index scan. On a tiny table PostgreSQL may still choose a sequential scan, because reading the whole table is cheaper than using the index.
 
-**When to index:**
-- Columns frequently used in `WHERE`, `JOIN`, `ORDER BY`
-- Foreign key columns
-- Columns used in `GROUP BY`
+### When to index, and when not to
 
-**When NOT to index:**
-- Very small tables
-- Columns with very low cardinality (e.g., Boolean)
-- Tables with mostly write operations
+Create an index for columns you filter, join, or order by in large tables, especially foreign keys and highly selective columns (a value that matches few rows).
 
-> 🔗 PostgreSQL docs: https://www.postgresql.org/docs/current/indexes.html
+Skip an index when the table is small, the column matches most of the rows (a yes/no column split evenly), or the table is written constantly and rarely read. Every insert, update, and delete must also update the index. A query that wraps the indexed column in a function, such as `WHERE LOWER(email) = ...`, cannot use an ordinary index on `email`.
+
+### Common mistake
+
+Indexing every column "to be safe". The extra indexes slow down writes, and many of them are never used for a read.
 
 ---
 
-### 1.13 Administration
+## 7. Week 48 — Access, Backups, Injection, and Documents
 
-#### Roles and Permissions
+### Roles and privileges
+
+A **role** is an identity PostgreSQL can grant privileges to. `CREATE USER` is a role with `LOGIN`.
 
 ```sql
--- Create a role
-CREATE ROLE app_readonly WITH LOGIN PASSWORD 'secret123';
+CREATE ROLE ts_analyst LOGIN PASSWORD 'analyst_pass';
 
--- Grant privileges
-GRANT CONNECT ON DATABASE trailshop TO app_readonly;
-GRANT USAGE ON SCHEMA public TO app_readonly;
-GRANT SELECT ON ALL TABLES IN SCHEMA public TO app_readonly;
+GRANT USAGE ON SCHEMA public TO ts_analyst;
+GRANT SELECT ON ALL TABLES IN SCHEMA public TO ts_analyst;
 
--- Grant specific privileges
-GRANT SELECT, INSERT, UPDATE ON products TO app_user;
-
--- Revoke privileges
-REVOKE DELETE ON products FROM app_user;
-
--- Drop a role
-DROP ROLE IF EXISTS app_readonly;
+REVOKE UPDATE ON products FROM ts_analyst;
 ```
 
-#### Backup and Restore
+`USAGE` on the schema lets the role see objects in it. Table privileges include `SELECT`, `INSERT`, `UPDATE`, and `DELETE`. Grant only what the job needs. An analyst who reports on TrailShop receives `SELECT`, not the right to change stock.
+
+`ALTER ROLE` changes a password or an attribute. `DROP ROLE` removes a role that no longer owns objects.
+
+### Backup and restore
+
+`pg_dump` writes a logical backup of one database. Custom format (`-Fc`) is the form to restore with `pg_restore`. `pg_dumpall` includes every database and the roles.
 
 ```bash
-# Backup (plain SQL format)
-pg_dump -U postgres -d trailshop -f trailshop_backup.sql
-
-# Backup (custom compressed format)
-pg_dump -U postgres -d trailshop -Fc -f trailshop_backup.dump
-
-# Restore from plain SQL
-psql -U postgres -d trailshop_new -f trailshop_backup.sql
-
-# Restore from custom format
-pg_restore -U postgres -d trailshop_new trailshop_backup.dump
+pg_dump -Fc -f trailshop.dump trailshop
+pg_restore -d trailshop_restore trailshop.dump
 ```
 
-> 🔗 PostgreSQL docs: https://www.postgresql.org/docs/current/sql-grant.html
-> 🔗 PostgreSQL docs: https://www.postgresql.org/docs/current/app-pgdump.html
+A backup that has never been restored is an untested file. The fundamental practice is: dump, then restore into an empty database and check that the tables are there.
+
+### SQL injection
+
+Injection happens when a program builds a statement by gluing user input into the SQL text:
+
+```text
+SELECT * FROM customers WHERE email = 'USER INPUT'
+```
+
+If the input is `' OR '1'='1`, the condition becomes true for every row. The defense to learn first is a **parameterized query**: the SQL text stays fixed, and the value is sent separately.
+
+```text
+SELECT * FROM customers WHERE email = $1
+```
+
+The application binds the email to `$1` (or to `%s` in a Python driver). The value cannot change the shape of the statement. Least privilege limits the damage if a statement is ever abused: the shop role should not be a superuser. An ORM parameterizes its ordinary queries. A raw statement that concatenates input is still unsafe.
+
+### Relational tables and documents
+
+TrailShop's orders, payments, stock, and keys stay in relational tables. The DBMS enforces the foreign keys, the checks, and the transactions.
+
+A document database stores a whole structure, often JSON, in one record. That fits data whose shape varies and is usually read together, such as a product specification sheet that differs for tents and for boots. PostgreSQL can keep that varying sheet in a `JSONB` column on `products` while the price, stock, and keys stay as ordinary columns.
+
+Choose relational tables when you need constraints, joins, and transactions across customers, orders, and stock. Choose a document, or a `JSONB` column, when the extra fields differ from product to product and you mostly fetch the whole sheet with the product.
+
+### Common mistake
+
+Building a login or a search by concatenating the user's text into the SQL string. An order and its payment belong in related tables with foreign keys and `CHECK` constraints.
 
 ---
 
-## 2. Query Execution Order
+## Key Terms
 
-When PostgreSQL processes a `SELECT` statement, it evaluates clauses in a specific logical order — **not** the order you write them:
-
-```
-┌─────────────────────────────────────────────────────────┐
-│  Logical Execution Order                                │
-├─────────────────────────────────────────────────────────┤
-│  1. FROM        → Identify source tables                │
-│  2. JOIN        → Combine tables based on ON condition  │
-│  3. WHERE       → Filter individual rows                │
-│  4. GROUP BY    → Form groups                           │
-│  5. HAVING      → Filter groups                         │
-│  6. SELECT      → Evaluate expressions, aliases         │
-│  7. DISTINCT    → Remove duplicate rows                 │
-│  8. ORDER BY    → Sort the result                       │
-│  9. LIMIT/OFFSET→ Return a subset of rows              │
-└─────────────────────────────────────────────────────────┘
-```
-
-**Why this matters:**
-- You can't use a `SELECT` alias in `WHERE` (it hasn't been computed yet).
-- You *can* use a `SELECT` alias in `ORDER BY` (it runs after `SELECT`).
-- `HAVING` can only reference columns in `GROUP BY` or aggregate results.
-- `WHERE` cannot contain aggregate functions — use `HAVING` instead.
-
-**Example — this FAILS:**
-
-```sql
-SELECT product_name, price * 0.9 AS discounted
-FROM products
-WHERE discounted < 100;  -- ERROR: column "discounted" does not exist
-```
-
-**Fix — use the expression or a subquery/CTE:**
-
-```sql
-SELECT product_name, price * 0.9 AS discounted
-FROM products
-WHERE price * 0.9 < 100;
-```
+| Term | Meaning |
+| --- | --- |
+| DDL / DML | Statements that define tables, and statements that change rows |
+| Aggregate | `COUNT`, `SUM`, `AVG`, `MIN`, `MAX` |
+| `HAVING` | A filter applied after grouping |
+| Inner join / left join | Matches only, or every left-hand row |
+| Correlated subquery | A subquery that uses a column from the outer query |
+| View | A named `SELECT` |
+| CTE | A named subquery introduced with `WITH` |
+| Transaction | A unit of work ended with `COMMIT` or `ROLLBACK` |
+| ACID | Atomicity, consistency, isolation, durability |
+| Isolation level | How much concurrent transactions can see. Default: `READ COMMITTED` |
+| Index | A separate structure that maps values to rows |
+| Seq Scan / Index Scan | A full read of the table, or a lookup through an index |
+| Role | An identity that holds privileges |
+| Parameterized query | SQL text with a placeholder, and the value sent separately |
+| JSONB | A PostgreSQL column that stores a JSON document |
 
 ---
 
-## 3. SQL Style Guide
+## Summary
 
-Consistent formatting makes SQL readable and maintainable. Follow these conventions in your TrailShop project:
-
-### Capitalization
-
-- **Keywords**: UPPERCASE — `SELECT`, `FROM`, `WHERE`, `JOIN`, `ON`, `INSERT`, `UPDATE`, `DELETE`
-- **Identifiers**: lowercase_snake_case — `product_name`, `order_id`, `category_id`
-- **Aliases**: short lowercase — `p`, `c`, `o`, `oi`
-
-### Indentation
-
-- Use **4 spaces** (no tabs).
-- Each major clause starts on a new line, left-aligned.
-- Continuation lines are indented.
-
-```sql
-SELECT p.product_name,
-       c.category_name,
-       p.price
-FROM products p
-JOIN product_categories pc ON pc.product_id = p.product_id
-JOIN categories c ON c.category_id = pc.category_id
-WHERE p.price > 50
-  AND p.stock_qty > 0
-ORDER BY p.price DESC
-LIMIT 20;
-```
-
-### Commas
-
-- Place commas **at the end** of lines (trailing commas).
-- One column per line in long `SELECT` lists.
-
-### Commenting
-
-```sql
--- Single-line comment for brief notes
-
-/*
- * Multi-line comment for
- * explaining complex logic.
- */
-```
-
-### Naming Conventions
-
-| Object | Convention | Example |
-|---|---|---|
-| Tables | Plural nouns | `products`, `order_items` |
-| Columns | Singular descriptive | `product_name`, `unit_price` |
-| Primary key | `table_singular_id` | `product_id`, `order_id` |
-| Foreign keys | Same name as the PK they reference | `category_id` in `product_categories` |
-| Indexes | `idx_table_columns` | `idx_products_category` |
-| Views | `v_description` | `v_product_catalog` |
-| Constraints | `type_table_columns` | `chk_products_price`, `uq_products_name` |
-
----
-
-## 4. Key Terms — Master SQL Glossary
-
-| Term | Definition |
-|---|---|
-| **DDL** | Data Definition Language — CREATE, ALTER, DROP |
-| **DML** | Data Manipulation Language — INSERT, UPDATE, DELETE |
-| **DQL** | Data Query Language — SELECT |
-| **DCL** | Data Control Language — GRANT, REVOKE |
-| **TCL** | Transaction Control Language — BEGIN, COMMIT, ROLLBACK |
-| **Aggregate function** | Computes a single value from a set of rows |
-| **Alias** | Temporary name for a table or column in a query |
-| **Cartesian product** | Every combination of rows from two tables (CROSS JOIN) |
-| **Correlated subquery** | A subquery that references columns from the outer query |
-| **CTE** | Common Table Expression — a named temporary result set |
-| **DISTINCT** | Removes duplicate rows from a result set |
-| **Foreign key** | A column that references the primary key of another table |
-| **Index** | A data structure that speeds up row retrieval |
-| **Join** | Combines rows from multiple tables based on a condition |
-| **NULL** | Represents missing or unknown data |
-| **Primary key** | Unique identifier for each row in a table |
-| **Query plan** | The database engine's strategy for executing a query |
-| **RETURNING** | PostgreSQL clause that returns affected rows after DML |
-| **Scalar subquery** | A subquery that returns exactly one value |
-| **Schema** | A namespace that contains database objects |
-| **Sequence** | Auto-incrementing number generator (behind SERIAL) |
-| **Transaction** | A group of statements executed as one atomic unit |
-| **View** | A stored query that behaves like a virtual table |
-| **Window function** | Performs calculation across a set of rows related to current row |
-
----
-
-## 5. Recommended Reading
-
-- Watt & Eng, *Database Design — 2nd Edition*, Chapters 14–16 (SQL DDL, DML, Administration)
-- PostgreSQL Official Tutorial: https://www.postgresql.org/docs/current/tutorial.html
-- PostgreSQL SQL Reference: https://www.postgresql.org/docs/current/sql.html
-- *SQL Style Guide* by Simon Holywell: https://www.sqlstyle.guide/
-
----
-
-## 6. Summary
-
-You've just reviewed the entire SQL toolkit that you've built up over 14 weeks:
-
-- **DDL** to define structure (CREATE, ALTER, DROP)
-- **DML** to manage data (INSERT, UPDATE, DELETE)
-- **Queries** from simple SELECT to complex multi-join aggregations
-- **Subqueries and CTEs** for breaking problems into steps
-- **Set operations** for combining query results
-- **Conditional logic** with CASE, COALESCE, NULLIF
-- **Views** for abstraction and security
-- **Transactions** for data integrity
-- **Indexes** for performance
-- **Roles and backups** for administration
-
-You know the logical execution order. You have a style guide. You have a glossary.
-
-**Next week** is the final exam. Use the optional exercises in this week's materials for self-paced practice — no submission is required.
-
----
-
-*Next chapter: Week 51 — "The Journey's End" (Final Exam)*
+- Weeks 40 and 41 are the statements you write most: create and change rows safely, then filter, group, and join. The clause order explains why aggregates belong in `HAVING`.
+- Week 44 adds the patterns that cross many tables: outer joins that keep unmatched rows, subqueries, views, and CTEs. Category questions join through `product_categories`. Money questions use `order_items.unit_price`.
+- Weeks 46 and 47 cover correctness under concurrency and the cost of a search: transactions and locks, then indexes and `EXPLAIN`.
+- Week 48 covers who may do what, how you get the data back, how injection is stopped, and when a document is a better fit than another table.

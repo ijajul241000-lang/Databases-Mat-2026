@@ -1,12 +1,10 @@
 # Week 51 — Final Exam
 
-> **Final exam week.** No new course content. Use this chapter for exam guidance, the study checklist, and optional practice in the Exercises file.
+> **Final exam week.** No new course content. The checklist below is the list of fundamentals to be able to explain and write. The optional mock paper is in the Exercises file.
 
 ## Epilogue: "The Journey's End"
 
-You've come a long way. Fourteen weeks ago, you walked into TrailShop as a junior developer tasked with taming a chaotic mess of spreadsheets. By Week 48, you had built a real, production-quality relational database from scratch — designed it, normalized it, secured it, optimized it, and connected it to an application.
-
-Now there is one final milestone: the **course exam**. This chapter helps you prepare by organizing everything you've learned into a structured review, giving you guidance on what to expect, and pointing you toward what comes *after* this course.
+Exam 1 covered Weeks 36–41. The final exam covers the whole course, including the design review from Week 49 and the SQL review from Week 50. Week 42 was that first exam. Week 43 was a holiday and has no topics of its own.
 
 ---
 
@@ -14,228 +12,163 @@ Now there is one final milestone: the **course exam**. This chapter helps you pr
 
 By the end of this chapter you will be able to:
 
-- Understand the exam format and types of questions
-- Use a structured checklist to identify topics needing review
-- Reflect on your learning journey
-- Identify next steps for continued database learning
+- See which kind of question is which: a short explanation, a SQL statement, or a design task
+- Use the week-by-week checklist to find gaps
+- Sit the optional mock paper under a time limit
 
 ---
 
 ## 1. Exam Guidance
 
-### What to Expect
+### What to expect
 
-The exam tests your understanding across the entire course. Questions fall into three categories:
+Questions fall into three kinds:
 
-| Question Type | Description | Weight |
-|---|---|---|
-| **Conceptual / Short Answer** | Explain database concepts in your own words | ~30% |
-| **Practical SQL** | Write SQL statements to solve given problems | ~50% |
-| **Design Scenarios** | Analyze requirements, draw schemas, normalize | ~20% |
+| Kind | What you do | Share of the paper |
+| --- | --- | --- |
+| Short explanation | Define a concept and give an example | about 30% |
+| SQL | Write statements against a schema you are given | about 50% |
+| Design | Give cardinalities, tables, keys, or a normalization to 3NF | about 20% |
 
-### Conceptual Questions
+The shares are a guide to how to spend your revision time.
 
-These test whether you *understand* the concepts, not just memorize syntax. Examples:
-- "Explain what referential integrity means and how PostgreSQL enforces it."
-- "Why would you use a transaction when transferring stock between warehouses?"
-- "What is the difference between DELETE and TRUNCATE?"
+**Short explanations.** Answer in your own words and add one concrete example. "Referential integrity means a foreign key matches an existing key. `orders.customer_id` must be a real `customers.customer_id`."
 
-**Tip:** Answer in your own words. Use a brief example if it helps clarify.
+**SQL.** You are given table and column names. Start from the clause order `SELECT ... FROM ... JOIN ... WHERE ... GROUP BY ... HAVING ... ORDER BY`. Use the names in the question. TrailShop questions use `products.name`, `stock_quantity`, and `product_categories`. Revenue is `quantity * unit_price`.
 
-### Practical SQL Questions
+**Design.** State both directions of each cardinality. Put a 1:N foreign key on the "many" side. Give every M:N a junction table. Then check 3NF: each non-key column depends on the whole primary key and on nothing else.
 
-You'll be given a schema description and asked to write SQL. Examples:
-- "Write a query to find the top 3 customers by total spending."
-- "Create a table with appropriate constraints for the given requirements."
-- "Write a transaction that safely moves an order from 'pending' to 'shipped'."
+### What this exam does not focus on
 
-**Tip:** Start with the structure (SELECT...FROM...WHERE), then fill in details. Use aliases. Don't forget semicolons.
+These were marked advanced in the weekly chapters, or they sit outside the course. Do not spend revision time on them:
 
-### Design Scenarios
+- Set operations (`UNION`, `INTERSECT`, `EXCEPT`), `CASE`, `COALESCE`, `NULLIF`, `GREATEST`, and `LEAST`
+- Recursive CTEs, materialized views, and window functions such as `RANK` and `ROW_NUMBER`
+- Join algorithms, index types other than the B-tree from `CREATE INDEX`, and point-in-time recovery
+- Column-level `GRANT`, `WITH GRANT OPTION`, and Boyce–Codd normal form
+- Application code, ORM syntax, cloud-provider settings, and the wording of PostgreSQL error messages
 
-These ask you to think like a designer:
-- "Given these business requirements, design a normalized schema (3NF)."
-- "This table has redundancy. Find the problems and normalize it to 3NF."
-- "This table has redundancy. What problems can occur? How would you fix it?"
-
-**Tip:** Draw the tables with their columns. Mark PKs and FKs. Check each normal form systematically.
-
-### What is NOT on the Exam
-
-- Memorizing exact PostgreSQL error messages
-- Writing application code (Python, Node.js, etc.)
-- ORM-specific syntax (Django, SQLAlchemy)
-- Cloud provider–specific features (AWS RDS configuration, etc.)
-- Obscure PostgreSQL extensions or contrib modules
+You should still be able to say what a parameterized query does, and that an ORM does not make a concatenated raw statement safe. You are not asked to write ORM code.
 
 ---
 
-## 2. Structured Study Checklist
+## 2. Study Checklist
 
-Use this checklist to guide your revision. For each item, ask yourself: "Can I explain this clearly and write SQL for it?" If not, revisit the corresponding week's theory.
+If you cannot explain an item and, where it asks for SQL, write it, reread that week's theory and the matching part of Week 49 or Week 50.
 
-### Fundamentals (Weeks 36–37)
+### Week 36 — Introduction
 
-- [ ] **Data vs Information** — Raw facts vs processed, contextual meaning
-- [ ] **File-based system problems** — Redundancy, isolation, integrity, concurrency
-- [ ] **Database & DBMS definition** — Organized collection + software to manage it
-- [ ] **Database characteristics** — Self-describing, program-data independence, multiple views
-- [ ] **Relational model** — Tables (relations), rows (tuples), columns (attributes)
-- [ ] **Keys** — Candidate, primary, foreign, composite, surrogate
-- [ ] **Referential integrity** — FK must match an existing PK or be NULL
-- [ ] **Entity vs Relationship** — Things we store data about vs connections between them
-- [ ] **Cardinality** — One-to-one, one-to-many, many-to-many (requires junction table)
+- [ ] Data is a raw fact. Information is that fact with a meaning.
+- [ ] Five file-system problems: redundancy, isolation, integrity, security, concurrency.
+- [ ] A database is the shared collection. A DBMS is the software that manages it.
+- [ ] Three levels: external, conceptual, internal. Logical and physical data independence.
 
-### Data Types and Constraints (Week 38)
+### Week 37 — The relational model
 
-- [ ] **PostgreSQL data types** — INTEGER, NUMERIC, VARCHAR, TEXT, BOOLEAN, DATE, TIMESTAMP, SERIAL
-- [ ] **Choosing appropriate types** — Match the real-world data (price = NUMERIC, not FLOAT)
-- [ ] **Constraints** — PRIMARY KEY, NOT NULL, UNIQUE, CHECK, DEFAULT, FOREIGN KEY
-- [ ] **Named constraints** — Syntax and benefits for maintenance
+- [ ] Relation, tuple, attribute, domain.
+- [ ] Candidate key, primary key, foreign key, composite key, surrogate and natural keys.
+- [ ] `NULL` is an unknown value. The test is `IS NULL`.
+- [ ] Entity integrity and referential integrity.
+- [ ] "Cardinality" as the number of rows, distinct from relationship cardinality in Week 38.
 
-### Basic SQL (Weeks 39–40)
+### Week 38 — Conceptual modelling
 
-- [ ] **CREATE TABLE** — Full syntax with column and table constraints
-- [ ] **INSERT, UPDATE, DELETE** — Syntax and common patterns
-- [ ] **SELECT with WHERE** — Comparison, BETWEEN, IN, LIKE, IS NULL
-- [ ] **ORDER BY, LIMIT, OFFSET** — Sorting and pagination
-- [ ] **Aggregate functions** — COUNT, SUM, AVG, MIN, MAX
-- [ ] **GROUP BY and HAVING** — Grouping rules, WHERE vs HAVING
+- [ ] Entity, attribute, relationship. Strong and weak entities.
+- [ ] Composite attributes are split. Multi-valued attributes become another entity.
+- [ ] 1:1, 1:N, and M:N, checked in both directions. Optional and mandatory participation.
+- [ ] M:N becomes a junction. Category–Product is `product_categories`. `products` has no `category_id`.
+- [ ] A foreign key forces each child to have a parent. It does not force each parent to have a child.
 
-### Joins and Relationships (Weeks 41–42)
+### Week 39 — Logical design
 
-- [ ] **INNER JOIN** — Only matching rows
-- [ ] **LEFT/RIGHT JOIN** — Preserve all rows from one side
-- [ ] **FULL OUTER JOIN** — All rows from both sides
-- [ ] **CROSS JOIN** — Cartesian product
-- [ ] **Self-join** — Joining a table to itself
-- [ ] **Multi-table joins** — Chaining 3+ tables
-- [ ] **Join conditions** — ON clause, multiple conditions
+- [ ] 1:N: foreign key on the "many" side, `NOT NULL` when that side is mandatory.
+- [ ] 1:1: foreign key plus `UNIQUE` (`payments.order_id`).
+- [ ] Types: `NUMERIC` for money, `VARCHAR` and `TEXT`, `INTEGER`, `TIMESTAMPTZ`, `SERIAL`.
+- [ ] `PRIMARY KEY`, `NOT NULL`, `UNIQUE`, `CHECK`, `DEFAULT`, `REFERENCES`, `ON DELETE`, `ON UPDATE`.
+- [ ] Create parent tables before the tables that reference them.
 
-### Subqueries and Advanced Queries (Weeks 43–44)
+### Week 40 — SQL fundamentals
 
-- [ ] **Scalar subquery** — Returns one value, used in SELECT or WHERE
-- [ ] **IN / NOT IN** — Match against a list from a subquery
-- [ ] **EXISTS / NOT EXISTS** — Check for row existence
-- [ ] **ANY / ALL** — Compare against a set
-- [ ] **Correlated subquery** — References outer query columns
-- [ ] **CTEs (WITH clause)** — Named temporary result sets, chaining
-- [ ] **Set operations** — UNION, INTERSECT, EXCEPT
-- [ ] **CASE, COALESCE, NULLIF** — Conditional logic in queries
+- [ ] `CREATE TABLE` with the constraints above.
+- [ ] `INSERT` of one row and of several rows. `UPDATE` and `DELETE` with `WHERE`.
+- [ ] A basic `SELECT`. String literals use single quotes.
 
-### Database Design and Normalization (Weeks 45–46)
+### Week 41 — Querying
 
-- [ ] **1NF** — Atomic values, no repeating groups
-- [ ] **2NF** — No partial dependencies (on part of a composite key)
-- [ ] **3NF** — No transitive dependencies (a non-key column depending on another non-key column)
-- [ ] **BCNF** — A stricter form of 3NF. Reaching 3NF is enough for this course
-- [ ] **Denormalization** — When and why to intentionally break normal forms
-- [ ] **ER diagrams** — Entities, attributes, relationships, cardinalities
+- [ ] `WHERE` with comparisons, `AND` / `OR` / `NOT`, `BETWEEN`, `IN`, `LIKE`, `ILIKE`, `IS NULL`.
+- [ ] `ORDER BY`, `LIMIT`, `OFFSET`.
+- [ ] `COUNT`, `SUM`, `AVG`, `MIN`, `MAX`. Aggregates skip `NULL`. `COUNT(*)` counts rows.
+- [ ] `GROUP BY`. Every non-aggregated selected column is in the `GROUP BY`.
+- [ ] `INNER`, `LEFT`, `RIGHT`, `FULL OUTER`, and `CROSS` joins. The `ON` clause.
+- [ ] Logical order: `FROM` → `WHERE` → `GROUP BY` → `HAVING` → `SELECT` → `ORDER BY` → `LIMIT`.
 
-### Views, Transactions, and Performance (Weeks 47–48)
+### Week 44 — Further SQL, fundamentals only
 
-- [ ] **Views** — CREATE VIEW, benefits (simplicity, security), limitations
-- [ ] **Transactions** — BEGIN, COMMIT, ROLLBACK, SAVEPOINT
-- [ ] **ACID properties** — Atomicity, Consistency, Isolation, Durability
-- [ ] **Indexes** — CREATE INDEX, B-tree, when to use, when to avoid
-- [ ] **EXPLAIN ANALYZE** — Reading query plans, Seq Scan vs Index Scan
-- [ ] **Query optimization** — Avoiding SELECT *, using appropriate indexes
+- [ ] A join of three or more tables, including the path through `product_categories`.
+- [ ] A self-join with two aliases.
+- [ ] A left join that keeps unmatched rows, and `IS NULL` to keep only those rows.
+- [ ] Scalar subquery, `IN`, `EXISTS`, `NOT EXISTS`, and a correlated subquery.
+- [ ] `CREATE VIEW` and `DROP VIEW`.
+- [ ] A CTE with `WITH`, including one CTE used by the main query.
 
-### Administration and Security (Week 48)
+### Week 45 — Normalization
 
-- [ ] **Roles** — CREATE ROLE, LOGIN, SUPERUSER, INHERIT
-- [ ] **Privileges** — GRANT, REVOKE on databases, schemas, tables
-- [ ] **Principle of least privilege** — Only grant what's needed
-- [ ] **pg_dump / pg_restore** — Backup and restore strategies
-- [ ] **Schemas** — Namespaces for organizing database objects
+- [ ] Insertion, update, and deletion anomalies.
+- [ ] 1NF: atomic values, no repeating groups, a primary key.
+- [ ] 2NF: no partial dependency. Partial dependencies need a composite key.
+- [ ] 3NF: no transitive dependency.
+- [ ] `order_items.unit_price` is the price charged on that order, not a copy of `products.price`.
+- [ ] Reach 3NF first. A later, measured exception is a decision you can explain.
 
-### Application Integration (Week 48)
+### Week 46 — Transactions
 
-- [ ] **Connection strings** — Host, port, database, user, password
-- [ ] **SQL injection** — What it is, parameterized queries as prevention
-- [ ] **ORMs** — Concept, benefits, trade-offs vs raw SQL
+- [ ] `BEGIN`, `COMMIT`, `ROLLBACK`, `SAVEPOINT`, `ROLLBACK TO SAVEPOINT`.
+- [ ] ACID, including that a committed change is written before the commit is confirmed.
+- [ ] A single statement is already its own transaction.
+- [ ] Dirty read, non-repeatable read, phantom read, lost update. PostgreSQL does not allow a dirty read.
+- [ ] `READ COMMITTED` is the default. `READ UNCOMMITTED` behaves as `READ COMMITTED`. PostgreSQL's `REPEATABLE READ` also prevents phantoms.
+- [ ] `SELECT ... FOR UPDATE` locks the row you are about to change. A deadlock is two transactions waiting on each other; PostgreSQL aborts one.
 
----
+### Week 47 — Indexes
 
-## 3. Reflection Exercise
+- [ ] A sequential scan reads the table. An index maps values to rows. The index you create is a B-tree.
+- [ ] `CREATE INDEX`. Primary keys and `UNIQUE` constraints are indexed. Foreign keys are not.
+- [ ] A composite index serves a lookup that starts with its leftmost column.
+- [ ] `EXPLAIN` shows the estimated plan. `EXPLAIN ANALYZE` runs the statement.
+- [ ] Seq Scan, Index Scan, and Index Only Scan.
+- [ ] Skip an index on a small table, a column that matches most rows, or a table that is written constantly and rarely read.
 
-Before the exam, take 15 minutes to reflect on your learning. Write brief answers to these questions (for yourself — not graded):
+### Week 48 — Administration, security, and documents
 
-1. **What database concept was hardest for you to grasp? How did you eventually understand it?**
-
-2. **If you had to explain normalization to a friend who has never taken this course, what analogy would you use?**
-
-3. **What would you do differently if you started the TrailShop project again from scratch?**
-
-4. **Which SQL skill do you feel most confident about? Which one needs more practice?**
-
-5. **How has your thinking about data organization changed since Week 36?**
+- [ ] `CREATE ROLE`, `GRANT`, `REVOKE`. Grant only what the job needs. `USAGE` on the schema, then the table privilege.
+- [ ] `pg_dump` and `pg_restore` for a logical backup. Restore once to prove the file works.
+- [ ] SQL injection comes from concatenating input into the statement text. A parameterized query sends the value separately.
+- [ ] Orders, payments, stock, and keys stay in relational tables. A varying specification sheet can be a document or a `JSONB` column.
 
 ---
 
-## 4. What's Next?
+## 3. A 15-minute self-check
 
-This course gave you a solid foundation. Here's where you can go from here:
+Pick one item you marked as shaky and do it on paper, without the theory open.
 
-### Window Functions
+1. Draw Customer, Order, Product, and Category with cardinalities. Mark `product_categories` and `order_items`.
+2. Write the query for "categories with no products".
+3. Normalize one flat table as far as 3NF, naming each dependency you remove.
+4. Write the `BEGIN` block for an order and a stock decrease, and say what a crash before `COMMIT` leaves behind.
 
-Functions like `ROW_NUMBER()`, `RANK()`, `LAG()`, `LEAD()`, and `SUM() OVER (...)` let you perform calculations across related rows without collapsing them into groups. They're essential for reporting, analytics, and leaderboard-style queries. PostgreSQL has excellent window function support.
-
-> 🔗 https://www.postgresql.org/docs/current/tutorial-window.html
-
-### Stored Procedures and Functions
-
-PostgreSQL lets you write server-side logic using PL/pgSQL (or even Python, JavaScript). Stored procedures encapsulate complex business logic inside the database, reducing round-trips between your application and the server. They're powerful but should be used judiciously.
-
-> 🔗 https://www.postgresql.org/docs/current/plpgsql.html
-
-### Triggers
-
-A trigger automatically executes a function when a specific event occurs (INSERT, UPDATE, DELETE). Use them for audit logging, enforcing complex business rules, or maintaining derived data. Be careful — triggers add hidden complexity.
-
-> 🔗 https://www.postgresql.org/docs/current/trigger-definition.html
-
-### ORMs and Application Frameworks
-
-Object-Relational Mappers like SQLAlchemy (Python), Prisma (JavaScript/TypeScript), or Hibernate (Java) translate between your programming language's objects and database tables. They speed up development but can generate inefficient queries if you don't understand the SQL underneath — which you now do.
-
-### Design Patterns
-
-Patterns like Repository, Unit of Work, and CQRS (Command Query Responsibility Segregation) help organize database access in larger applications. They separate concerns and make code more testable and maintainable.
-
-### Cloud Databases
-
-Services like AWS RDS, Google Cloud SQL, and Azure Database for PostgreSQL let you run PostgreSQL without managing the server yourself. You still write the same SQL, but you gain automated backups, scaling, and high availability. Understanding the fundamentals you've learned makes cloud databases much easier to work with.
-
-### Data Warehousing and Analytics
-
-When databases grow very large and are used primarily for analytics (not transactions), you enter the world of data warehousing. Technologies like columnar storage, star schemas, and tools like Apache Spark or BigQuery build on the relational concepts you already know.
+The Exercises file is a full mock paper if you want a timed run. Ninety minutes is a reasonable length.
 
 ---
 
-## 5. Summary
+## 4. After the Course
 
-You started this course with spreadsheets and chaos. You're ending it with:
-
-- A **solid understanding** of the relational model and why it exists
-- The ability to **design** a normalized database schema from business requirements
-- Confidence in **writing SQL** — from simple SELECT to complex multi-CTE queries
-- Knowledge of **transactions, indexes, and security** for production databases
-- Experience **connecting** a database to a real application
-- A **completed TrailShop project** (submitted in Week 48) that demonstrates all of the above
-
-Databases are everywhere. Every web application, mobile app, enterprise system, and data pipeline relies on them. The skills you've built here will serve you in every software project you work on.
-
-**Good luck on the final exam.** You've earned every bit of the knowledge you now carry.
+Window functions, stored procedures, triggers, and ORMs are useful next steps. They are not part of this exam. The PostgreSQL tutorial and the SQL reference you have used all term are the place to start when you want them.
 
 ---
 
-## Recommended Reading
+## Summary
 
-- Watt & Eng, *Database Design — 2nd Edition* — Full text review for exam preparation
-- PostgreSQL Official Documentation: https://www.postgresql.org/docs/current/
-- *Designing Data-Intensive Applications* by Martin Kleppmann — For those who want to go deeper
-
----
-
-*End of course materials. Good luck on the exam!*
+- Revise from the checklist, week by week. Weeks 49 and 50 already collect the same fundamentals in two shorter chapters.
+- In a design answer, show both directions of the cardinality, the foreign key or the junction, and a 3NF check.
+- In a SQL answer, use the column names you are given, filter groups with `HAVING`, and keep unmatched rows with a left join or `NOT EXISTS`.
+- In a transaction or index answer, name the property or the plan line, then the statement that produces it.

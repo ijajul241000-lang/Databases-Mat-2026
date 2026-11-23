@@ -1,656 +1,356 @@
 # Week 49 — Final Review: Database Design
 
-> **Exam review week.** No new concepts and no required work. Use this chapter and the optional exercises to prepare for the final exam. The TrailShop project was completed in Week 48.
+> **Exam review week.** No new concepts and no required work. Use this chapter and the optional exercises to practise the design fundamentals from Weeks 36, 37, 38, 39, and 45. SQL, transactions, indexes, and administration are reviewed in Week 50.
 
 ## Chapter 13: "The Design Review"
 
-The trail outside TrailShop is covered in the first real snow of winter. Inside, the whiteboard in the back office is full — ER diagrams, table schemas, arrows connecting foreign keys to primary keys, sticky notes marking design decisions made weeks ago. You step back and look at the whole picture.
-
-This is the moment every database designer reaches: the review. You built TrailShop over Weeks 36–48 — from vague requirements through conceptual models, logical design, normalization, and finally real PostgreSQL tables. Now you can ask yourself: *Is it good? Is it correct? Would it survive contact with real users and real data?*
-
-Today you are not learning new concepts. You are reviewing everything you have learned this semester, pulling it together into a unified design process, and developing the critical eye you need to evaluate your own work — and the work of your peers.
+The TrailShop database is finished. This week you look back at the design decisions that produced it: why a database was needed, how the relational rules work, how the ER model became tables, and how you check that those tables are in third normal form.
 
 ---
 
 ## Learning Objectives
 
-After this lecture, you will be able to:
+After this review you will be able to:
 
-- Describe the complete database design pipeline from requirements to implementation
-- Identify common mistakes at each stage of the design process
-- Apply a quality checklist to evaluate any relational database design
-- Review the TrailShop reference schema as a complete, production-ready example
-- Provide constructive peer feedback on database designs
-- Define and use all key design terms from the course
-
----
-
-## 1 — The Complete Design Process
-
-### 1.1 The Pipeline
-
-Database design is not a single activity — it is a pipeline of stages, each feeding the next. Mistakes made early cascade through every subsequent stage, becoming harder and more expensive to fix.
-
-The pipeline:
-
-```
-Requirements → ER Model → Logical Design → Normalization → Implementation
-```
-
-Every stage transforms one artifact into the next. Skip a stage, and you introduce risk. Rush a stage, and you carry errors forward.
-
-### 1.2 Stage Reference Table
-
-| Stage | What You Produce | Key Decisions |
-|-------|-----------------|---------------|
-| **Requirements** | Written requirements document | What data matters? What questions will the system answer? Who are the users? |
-| **ER Modelling** | Entity-Relationship diagram | What are the entities? How are they related? What are the cardinalities? |
-| **Logical Design** | Relational schema (tables, columns, keys) | How do entities map to tables? Where do foreign keys go? What junction tables are needed? |
-| **Normalization** | Refined schema in 3NF (or higher) | Are there redundancies? Partial dependencies? Transitive dependencies? |
-| **Implementation** | SQL DDL (CREATE TABLE statements) | What data types? What constraints? What defaults? What ON DELETE actions? |
-
-*Reference: Watt & Eng, "Database Design — 2nd Edition", Chapters 1–13 cover this complete pipeline.*
-
-### 1.3 How Mistakes Cascade
-
-Consider what happens when you miss an entity in the requirements stage:
-
-1. **Requirements**: You forget that TrailShop needs to track suppliers
-2. **ER Model**: No supplier entity appears in the diagram
-3. **Logical Design**: No supplier table, no foreign key from products to suppliers
-4. **Normalization**: Nothing to normalize — the data simply does not exist
-5. **Implementation**: The database cannot answer "Who supplies this product?"
-
-Now you must go back to the ER model, add the entity and relationships, redesign the logical schema, check normalization again, and write new DDL. The later you discover the missing piece, the more work you redo.
-
-This is why we spend time on requirements and ER modelling — not because they are exciting, but because they are cheap places to make corrections.
-
-### 1.4 Design Is Iterative
-
-Real design is never purely linear. You will:
-
-- Discover missing requirements during ER modelling
-- Find normalization problems that force you to restructure tables
-- Realize during implementation that a data type choice does not support a required query
-
-This is normal. The pipeline gives you a *direction*, not a rigid sequence. But you should always know which stage you are working in and what artifact you are producing.
+- Explain why a database is used instead of separate files, and name the three schema levels
+- Identify keys, `NULL`, entity integrity, and referential integrity
+- Read a short requirement and state entities, cardinalities, and participation
+- Turn an ER model into tables, foreign keys, data types, and constraints
+- Find insertion, update, and deletion anomalies and normalize a table to 3NF
+- Apply a design checklist to the TrailShop schema
 
 ---
 
-## 2 — ER Modelling Review
+## How to Use This Chapter
 
-### 2.1 Common Mistakes Checklist
+Work through the five weeks below. Each section is the idea, one TrailShop example, and the mistake that most often loses marks. Then use the checklist in Section 7 on the exercises.
 
-When reviewing an ER diagram, look for these frequent problems:
+Weeks 40–41 and 44 (SQL), 46 (transactions), 47 (indexes), and 48 (administration, security, and NoSQL) are reviewed in Week 50. Week 42 was Exam 1. Week 43 was a holiday.
 
-| # | Mistake | Example |
-|---|---------|---------|
-| 1 | Missing entity | Forgetting "payments" when the system needs payment tracking |
-| 2 | Wrong cardinality | Marking orders → customers as M:N when it should be N:1 |
-| 3 | Missing attributes | An entity with only a name and ID — where are the other details? |
-| 4 | Composite attributes not decomposed | "address" as a single attribute instead of street, city, postal_code |
-| 5 | Multi-valued attributes not resolved | "phone_numbers" stored in one attribute |
-| 6 | Derived attributes stored | Storing "age" when you have "birth_date" |
-| 7 | Missing relationships | Entities that exist but have no connection to the rest of the model |
-| 8 | Redundant relationships | Two paths between the same entities that represent the same fact |
-
-### 2.2 Quick Reference: Entity Types
-
-| Type | Description | Example |
-|------|-------------|---------|
-| **Strong entity** | Exists independently, has its own primary key | Customer, Product |
-| **Weak entity** | Depends on a strong entity for identification | OrderItem (depends on Order) |
-
-### 2.3 Quick Reference: Relationship Types
-
-| Cardinality | Meaning | Example |
-|-------------|---------|---------|
-| **1:1** | One instance relates to exactly one instance | Person — Passport |
-| **1:N** | One instance relates to many instances | Customer — Orders |
-| **M:N** | Many instances relate to many instances | Products — Categories (if multi-category) |
-
-### 2.4 Quick Reference: Participation
-
-| Type | Meaning | Notation |
-|------|---------|----------|
-| **Total** | Every instance must participate | Double line — every order MUST have a customer |
-| **Partial** | Some instances may not participate | Single line — a customer MAY have zero orders |
-
-### 2.5 Cardinality Determination Process
-
-When you are unsure about cardinality, ask these questions:
-
-1. Pick one instance of Entity A. How many instances of Entity B can it relate to? (one or many?)
-2. Pick one instance of Entity B. How many instances of Entity A can it relate to? (one or many?)
-3. Combine the answers: one-one → 1:1, one-many → 1:N, many-many → M:N
-
-Always test with concrete examples from your domain. "Can one customer have many orders? Yes. Can one order belong to many customers? No." → 1:N from customer to order.
-
-### 2.6 TrailShop ER Quick Reference
-
-The TrailShop model includes:
-
-- **Categories** (strong entity): category_id, name, description
-- **Products** (strong entity): product_id, name, description, price, stock_quantity
-- **ProductCategories** (junction): product_id + category_id — resolves Category M:N Product
-- **Customers** (strong entity): customer_id, first_name, last_name, email, created_at
-- **Orders** (strong entity): order_id, customer_id, order_date, status
-- **OrderItems** (weak entity): order_id + product_id, quantity, unit_price
-- **Payments** (strong entity): payment_id, order_id, amount, payment_method, payment_date
-
-Key relationships:
-- Category —1:N— Product
-- Customer —1:N— Order
-- Order —1:N— OrderItem
-- Product —1:N— OrderItem (M:N between Order and Product, resolved via OrderItem)
-- Order —1:1— Payment
+The later weekly chapters mark some topics as advanced. They are not the focus of this review: Boyce–Codd normal form beyond the statement that 3NF is enough for this course, and any design technique that was not in the learning objectives of Weeks 36–39 and 45.
 
 ---
 
-## 3 — Relational Design Review
+## 1. Week 36 — Why Databases Exist
 
-### 3.1 Mapping Rules Quick Reference
+### The idea
 
-| ER Construct | Relational Mapping | Notes |
-|--------------|-------------------|-------|
-| Strong entity | Table with own PK | Each attribute becomes a column |
-| Weak entity | Table with composite PK (own partial key + owner FK) | Foreign key to owner is part of PK |
-| 1:1 relationship | FK in either table (prefer the total-participation side) | Add UNIQUE constraint on FK |
-| 1:N relationship | FK in the "many" side table | FK references PK of the "one" side |
-| M:N relationship | Junction table with two FKs forming composite PK | May include relationship attributes |
-| Multi-valued attribute | Separate table with FK back to owner | Each value gets its own row |
-| Composite attribute | Decompose into individual columns | street, city, postal_code instead of address |
+**Data** is a raw fact. **Information** is that fact with a meaning you can use. `149.99` is data. "The Trail Runner X costs €149.99" is information.
 
-*Reference: Watt & Eng, Ch. 9 — "Mapping ER Models to Relational Schemas".*
+A **database** is a shared, logically related collection of data, built for a purpose. A **DBMS** (PostgreSQL, in this course) is the software that stores that data and controls access to it. Applications talk to the DBMS. They do not open the data files themselves.
 
-### 3.2 Data Type Selection Guide
+Separate files and spreadsheets fail in five ways:
 
-Choose the most specific data type that correctly represents your domain:
+| Problem | What goes wrong at TrailShop | What the DBMS does |
+| --- | --- | --- |
+| Redundancy and inconsistency | The same price is stored in three spreadsheets and the copies drift apart | Each fact is stored once |
+| Isolation | Customers, orders, and categories live in different files and formats | Related tables can be queried together |
+| Integrity | A blank name or a negative price is accepted | Constraints reject invalid rows |
+| Security | Opening the file reveals every column | Roles grant access to specific actions |
+| Concurrency | Two people save the same spreadsheet and one set of edits disappears | The DBMS coordinates simultaneous users |
 
-| Data Scenario | Recommended Type | Why |
-|---------------|-----------------|-----|
-| Unique identifier (auto) | `INTEGER GENERATED ALWAYS AS IDENTITY` | Standard surrogate key, auto-incrementing |
-| Short text (name, title) | `VARCHAR(100)` | Bounded length prevents abuse |
-| Long text (description) | `TEXT` | No practical limit needed |
-| Email address | `VARCHAR(255)` | RFC max is 254 characters |
-| Money / price | `NUMERIC(10,2)` | Exact decimal — never use FLOAT for money |
-| Quantity (integer) | `INTEGER` | Whole items only |
-| Date only (birth date) | `DATE` | No time component needed |
-| Date + time (order placed) | `TIMESTAMP` | Full precision |
-| Date + time + timezone | `TIMESTAMPTZ` | For international applications |
-| Boolean flag | `BOOLEAN` | true/false only |
-| Status with fixed options | `VARCHAR(20)` with CHECK | Or use an enum type |
-| Percentage | `NUMERIC(5,2)` with CHECK (0–100) | Exact decimal with range constraint |
-| UUID identifier | `UUID` | For distributed systems or public-facing IDs |
+The **three-schema architecture** separates three views of the same database:
 
-### 3.3 Constraint Design Patterns
+| Level | What it describes | TrailShop example |
+| --- | --- | --- |
+| External | What one user or application sees | The warehouse view shows `stock_quantity`; the shop view shows `name` and `price` |
+| Conceptual | The full logical structure: tables, columns, relationships, constraints | The TrailShop schema as a whole |
+| Internal | How the data is stored on disk | Files, pages, and indexes, managed by PostgreSQL |
 
-Constraints enforce business rules at the database level — they are your last line of defense against bad data.
+**Logical data independence** means you can change the conceptual schema, such as adding `weight_kg`, and applications that do not use the new column keep working. **Physical data independence** means you can change storage, such as adding an index, without rewriting those applications.
 
-**PRIMARY KEY**: Every table must have one. Identifies each row uniquely.
+### TrailShop example
 
-```sql
-customer_id INTEGER GENERATED ALWAYS AS IDENTITY PRIMARY KEY
-```
+The founders could not answer "which category brought in the most revenue?" from separate spreadsheets. The database stores products, categories, and order lines once, and a query produces the information.
 
-**FOREIGN KEY**: Links tables together. Enforces referential integrity.
+### Common mistake
 
-```sql
-category_id INTEGER NOT NULL REFERENCES categories(category_id)
-```
-
-**NOT NULL**: The column must have a value. Use on every column that must always be filled.
-
-```sql
-email VARCHAR(255) NOT NULL
-```
-
-**UNIQUE**: No two rows can have the same value. Use for natural keys and business identifiers.
-
-```sql
-email VARCHAR(255) NOT NULL UNIQUE
-```
-
-**CHECK**: Validates that values meet a condition.
-
-```sql
-price NUMERIC(10,2) NOT NULL CHECK (price >= 0)
-stock_quantity INTEGER NOT NULL CHECK (stock_quantity >= 0)
-status VARCHAR(20) NOT NULL CHECK (status IN ('pending', 'shipped', 'delivered', 'cancelled'))
-```
-
-**DEFAULT**: Provides a value when none is specified.
-
-```sql
-created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
-status VARCHAR(20) NOT NULL DEFAULT 'pending'
-```
-
-### 3.4 ON DELETE / ON UPDATE Actions
-
-When a referenced row is deleted or updated, what should happen to the rows that reference it?
-
-| Action | Behavior | When to Use |
-|--------|----------|-------------|
-| **CASCADE** | Delete/update referencing rows automatically | Child rows that have no meaning without the parent (order_items when order is deleted) |
-| **RESTRICT** | Prevent the delete/update entirely | When deletion would lose important data (don't delete a customer who has orders) |
-| **SET NULL** | Set the FK column to NULL | When the reference is optional (product's category is removed — product can exist without category) |
-| **SET DEFAULT** | Set the FK column to its default value | When a sensible default exists (reassign to "uncategorized") |
-| **NO ACTION** | Same as RESTRICT but checked at end of transaction | When you want deferred constraint checking |
-
-Choose the action that matches your business rule. Ask: "If the parent row disappears, what should happen to this child row?"
+Calling a spreadsheet a database because it has rows and columns. A table in a file has no DBMS enforcing integrity, concurrency, or a single shared structure.
 
 ---
 
-## 4 — Normalization Review
+## 2. Week 37 — The Relational Model
 
-### 4.1 First Normal Form (1NF)
+### The idea
 
-**Rule**: Every column contains only atomic (indivisible) values; no repeating groups.
+| Relational term | Everyday word | TrailShop example |
+| --- | --- | --- |
+| Relation | Table | `products` |
+| Tuple | Row | One product |
+| Attribute | Column | `price` |
+| Domain | The set of allowed values | Prices that are numbers with two decimal places, greater than 0 |
+| Degree | Number of columns | |
+| Cardinality (of a relation) | Number of rows | |
 
-**Violation**:
-```sql
--- BAD: multiple phone numbers in one column
-INSERT INTO customers (name, phones) VALUES ('Anna', '040-111, 050-222');
-```
+This "cardinality" is the number of rows. In Week 38, cardinality means how many entities participate in a relationship (1:1, 1:N, M:N). Both uses appear on the exam. Read the question to see which one it means.
 
-**Fix**: Create a separate `customer_phones` table with one row per phone number.
+**Keys**
 
-### 4.2 Second Normal Form (2NF)
+- A **candidate key** is a minimal set of columns that uniquely identifies each row. `customer_id` and `email` can both be candidate keys of `customers`.
+- The **primary key** is the candidate key chosen as the row's identifier. TrailShop uses `customer_id`.
+- A **foreign key** is a column (or columns) whose values must match a candidate key in another table, usually the primary key. `orders.customer_id` references `customers.customer_id`.
+- A **composite key** uses more than one column. `product_categories` is identified by (`product_id`, `category_id`).
+- A **surrogate key** is an artificial identifier such as `SERIAL`. A **natural key** is a real-world identifier such as `email`.
 
-**Rule**: In 2NF (and also 1NF), every non-key column depends on the *entire* primary key, not just part of it.
+**`NULL`** means "no value", not zero and not an empty string. `NULL` is not equal to anything, including another `NULL`. The test is `IS NULL` or `IS NOT NULL`.
 
-**Violation**:
-```sql
--- BAD: product_name depends only on product_id, not on the full PK (order_id, product_id)
-CREATE TABLE order_items (
-    order_id INTEGER,
-    product_id INTEGER,
-    quantity INTEGER,
-    product_name VARCHAR(100),  -- partial dependency!
-    PRIMARY KEY (order_id, product_id)
-);
-```
+**Integrity rules**
 
-**Fix**: Remove `product_name` — it belongs in the `products` table.
+- **Entity integrity:** every row must be identifiable, so the primary key is unique and no part of it may be `NULL`.
+- **Referential integrity:** a foreign-key value must match an existing referenced key, or be `NULL` when the column allows it. `orders.customer_id` is `NOT NULL`, so every order refers to a real customer.
 
-### 4.3 Third Normal Form (3NF)
+### TrailShop example
 
-**Rule**: In 3NF (and also 2NF), no non-key column depends on another non-key column (no transitive dependencies).
+`product_categories` stores pairs of keys. The primary key (`product_id`, `category_id`) stops the same product being filed under the same category twice. Each foreign key must point at a row that already exists in `products` or `categories`.
 
-**Violation**:
-```sql
--- BAD: city depends on postal_code, which depends on the PK
-CREATE TABLE customers (
-    customer_id INTEGER PRIMARY KEY,
-    postal_code VARCHAR(5),
-    city VARCHAR(100)  -- transitive dependency: city depends on postal_code, not on customer_id
-);
-```
+### Common mistake
 
-**Fix**: Create a `postal_codes` table with (postal_code, city), reference it via FK.
-
-### 4.4 Boyce-Codd Normal Form (BCNF)
-
-BCNF is a stricter version of 3NF. In practice, most tables that are in 3NF are also in BCNF. The exceptions involve tables with multiple overlapping candidate keys — rare in typical application databases.
-
-For this course, achieving 3NF is sufficient.
-
-*Reference: Watt & Eng, Ch. 12 — "Normalization".*
-
-### 4.5 Denormalization
-
-Sometimes you deliberately break normal forms for performance:
-
-- **Storing calculated totals** (e.g., `total_amount` in orders) to avoid recalculating from order_items on every read
-- **Duplicating a name** in a child table for fast display without joins
-- **Adding a counter column** (e.g., `order_count` in customers) to avoid COUNT queries
-
-Rules for denormalization:
-
-1. Only denormalize after you have a normalized design
-2. Only denormalize when you have measured a real performance problem
-3. Document what you denormalized and why
-4. Ensure application logic keeps the denormalized data in sync
-
-### 4.6 Normalization Checklist
-
-- [ ] Every column contains only one value (1NF)
-- [ ] No repeating groups or arrays in columns (1NF)
-- [ ] All non-key columns depend on the full primary key (2NF)
-- [ ] No column depends on another non-key column (3NF)
-- [ ] Any intentional denormalization is documented and justified
-- [ ] Junction tables have correct composite primary keys
+Writing a condition that compares a column to `NULL` with `=`. The comparison does not match those rows. Use `IS NULL`.
 
 ---
 
-## 5 — Design Quality Checklist
+## 3. Week 38 — Conceptual Modelling
 
-Use this checklist to evaluate any database design — your own or a peer's.
+### The idea
 
-### The 10-Point Checklist
+An ER model is a picture of the business before you write SQL.
 
-| # | Check | Question to Ask |
-|---|-------|-----------------|
-| 1 | **Primary Keys** | Does every table have a clear, appropriate primary key? |
-| 2 | **Foreign Keys** | Are all relationships enforced with foreign key constraints? |
-| 3 | **NOT NULL** | Are required columns marked NOT NULL? |
-| 4 | **CHECK Constraints** | Are business rules enforced at the database level? |
-| 5 | **3NF Compliance** | Is the schema free of redundancy and transitive dependencies? |
-| 6 | **Naming Conventions** | Are names consistent, lowercase, snake_case, and meaningful? |
-| 7 | **Referential Integrity** | Can orphan rows exist? Are FK actions defined? |
-| 8 | **ON DELETE Actions** | Is every FK's delete behavior explicitly chosen and appropriate? |
-| 9 | **Data Types** | Is each column's type the most specific correct choice? |
-| 10 | **ER Consistency** | Does the implementation match the ER diagram? |
+- An **entity** is a thing you store data about. A **strong entity** has its own key (`customers`, `products`). A **weak entity** is identified only together with an owner. An order line is identified by the order plus the product.
+- An **attribute** is a property of an entity. A **composite** attribute, such as an address, is split into `street`, `city`, `postal_code`, and `country`. A **multi-valued** attribute, such as several phone numbers, becomes another entity. A **derived** value, such as an order total, is calculated from stored columns rather than stored again.
+- A **relationship** connects entities.
+- **Cardinality** asks "how many?" in both directions. **Participation** asks "must it?" Total (mandatory) participation means every instance takes part. Partial (optional) participation means some instances do not.
 
-### Expanded Explanations
+Ask both directions with a real example:
 
-**1. Primary Keys**: Prefer surrogate keys (`INTEGER GENERATED ALWAYS AS IDENTITY`) for main entities. Use composite keys only for junction tables. Every table needs exactly one PK — no exceptions.
+1. One customer — how many orders? Many.
+2. One order — how many customers? One.
 
-**2. Foreign Keys**: Every relationship in your ER diagram must be enforced with a FK constraint. Without FK constraints, the database cannot prevent orphan rows. If you draw a line in the ER, there must be a FK in the schema.
+That is **1:N** from customer to order. The customer side is optional (a customer may have no orders). The order side is mandatory (every order has a customer).
 
-**3. NOT NULL**: Default to NOT NULL for everything, then relax to nullable only when you have a specific reason. A column that allows NULL is a column that can have missing data — make sure that is intentional.
+**M:N** cannot be stored as a single foreign key. It becomes an associative (junction) entity.
 
-**4. CHECK Constraints**: Prices should not be negative. Quantities should not be negative. Status should be one of a defined set. If you can express a rule as a CHECK, do it — the database is the last line of defense.
+| Relationship | Cardinality | How TrailShop models it |
+| --- | --- | --- |
+| Customer — Order | 1:N | `orders.customer_id` |
+| Category — Product | M:N | `product_categories` (`product_id`, `category_id`) |
+| Order — Product | M:N | `order_items`, with `quantity` and `unit_price` on the junction |
+| Order — Payment | 1:1 | `payments.order_id` is `UNIQUE` |
 
-**5. 3NF Compliance**: Look at every non-key column. Does it depend only on the primary key? Or does it depend on another non-key column? If the latter, you have a normalization violation.
+Crow's foot notation draws the "many" end as a fork and the "one" end as a single mark. An open circle means optional. A bar means mandatory. The exam accepts a clear diagram or a precise written description of the same facts.
 
-**6. Naming Conventions**: Tables are plural nouns (`customers`, `orders`). Columns are singular (`first_name`, `email`). Everything is lowercase snake_case. Foreign key columns match the referenced table's PK name (`customer_id` in orders references `customer_id` in customers).
+A foreign key on the child records the parent's key. It enforces "each child has a parent". It does not, by itself, enforce "each parent has at least one child". TrailShop's business rule says an order should contain at least one item, and a product may have no category yet. "At least one item" needs an application check or a trigger.
 
-**7. Referential Integrity**: If `orders.customer_id` references `customers.customer_id`, can you insert an order for customer 999 when customer 999 does not exist? With a FK constraint, no. Without one, yes — and your data becomes inconsistent.
+### TrailShop example
 
-**8. ON DELETE Actions**: Think about each FK: what happens when the parent is deleted? Should the children be deleted too (CASCADE)? Should the delete be blocked (RESTRICT)? Should the FK be set to NULL? Choose deliberately for each relationship.
+A rain jacket can be both Clothing and Accessories. `products` therefore has no `category_id`. The link lives in `product_categories`.
 
-**9. Data Types**: Do not use TEXT when VARCHAR(100) is appropriate. Do not use FLOAT for money. Do not use VARCHAR for dates. The type should match the domain as precisely as possible.
+### Common mistake
 
-**10. ER Consistency**: After implementation, compare your CREATE TABLE statements back to your ER diagram. Every entity should be a table. Every relationship should be a FK. Every attribute should be a column. If they do not match, one of them is wrong.
+Drawing Category–Product as 1:N and putting `category_id` on `products`. That was an early sketch. From Week 38 onward one product belongs to many categories.
 
 ---
 
-## 6 — Complete TrailShop Reference Schema
+## 4. Week 39 — Logical Design
 
-This is the full TrailShop schema as it should look after the complete design process. Study each table, its constraints, and its design decisions.
+### The idea
 
-### 6.1 Categories
+Logical design turns the ER model into tables.
 
-```sql
-CREATE TABLE categories (
-    category_id INTEGER GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
-    name        VARCHAR(100) NOT NULL UNIQUE,
-    description TEXT
-);
-```
+| ER construct | Relational result |
+| --- | --- |
+| Strong entity | A table. The key attribute becomes the primary key |
+| Composite attribute | Separate columns (`street`, `city`, `postal_code`, `country`) |
+| 1:N relationship | The primary key of the "one" side is a foreign key on the "many" side |
+| Mandatory participation on the many side | That foreign key is `NOT NULL` |
+| M:N relationship | A junction table whose primary key is the two foreign keys, unless extra columns need their own identifier |
+| 1:1 relationship | A foreign key on one side, with `UNIQUE` so the link cannot be repeated |
 
-**Self-review**:
-- Why is `name` UNIQUE? Because two categories should not have the same name.
-- Why is `description` nullable? Because a category can exist without a description.
-- Why no ON DELETE concerns yet? `product_categories` will reference this PK.
+**Data types used in TrailShop**
 
-### 6.2 Products
+| Kind of value | Type | Why |
+| --- | --- | --- |
+| Identifier | `SERIAL` or `INTEGER` | `SERIAL` creates an integer sequence for surrogate keys |
+| Money | `NUMERIC(10,2)` | Exact decimal. Floating-point types round money |
+| Short text | `VARCHAR(n)` | Names, emails, status codes, with a stated maximum |
+| Long text | `TEXT` | Descriptions |
+| Whole count | `INTEGER` | `stock_quantity`, `quantity` |
+| Weight | `NUMERIC(6,2)` | Kilograms, optional on `products` |
+| Moment in time | `TIMESTAMPTZ` | `registered_at`, `order_date`, `created_at` |
+| Yes/no | `BOOLEAN` | When the value really is only true or false |
+
+**Constraints**
+
+| Constraint | Role in TrailShop |
+| --- | --- |
+| `PRIMARY KEY` | Identifies the row |
+| `NOT NULL` | The column must have a value |
+| `UNIQUE` | No duplicates. `email` is unique. `payments.order_id` is unique, which makes Order–Payment 1:1 |
+| `CHECK` | A condition. `price > 0`, `stock_quantity >= 0`, `status` in a fixed list |
+| `DEFAULT` | A value when the insert omits the column. `stock_quantity` defaults to 0. `country` defaults to `'Finland'` |
+| `REFERENCES` | The foreign key. `ON DELETE RESTRICT` blocks the parent delete. `ON DELETE CASCADE` deletes the dependent rows. `ON UPDATE CASCADE` follows a changed parent key |
+
+**Surrogate and natural keys.** `email` can identify a customer, and it is declared `UNIQUE`. The primary key is still `customer_id`, because an email can change and it is personal data. The natural key remains a candidate key.
+
+Create parent tables before the tables that reference them: `categories`, `customers`, and `products` first; then `product_categories`, `orders`, `order_items`, and `payments`.
+
+### TrailShop example
 
 ```sql
 CREATE TABLE products (
-    product_id     INTEGER GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
-    name           VARCHAR(200) NOT NULL,
+    product_id     SERIAL         PRIMARY KEY,
+    name           VARCHAR(100)   NOT NULL,
     description    TEXT,
-    price          NUMERIC(10,2) NOT NULL CHECK (price > 0),
-    stock_quantity INTEGER NOT NULL DEFAULT 0 CHECK (stock_quantity >= 0),
-    created_at     TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
+    price          NUMERIC(10,2)  NOT NULL
+                   CONSTRAINT products_price_positive CHECK (price > 0),
+    weight_kg      NUMERIC(6,2)
+                   CONSTRAINT products_weight_positive CHECK (weight_kg > 0),
+    stock_quantity INTEGER        NOT NULL DEFAULT 0
+                   CONSTRAINT products_stock_non_negative CHECK (stock_quantity >= 0),
+    created_at     TIMESTAMPTZ    NOT NULL DEFAULT NOW()
 );
 ```
 
-**Self-review**:
-- Why `NUMERIC(10,2)` for price? Exact decimal arithmetic — never use FLOAT for money.
-- Why `CHECK (price > 0)`? A negative or zero price makes no business sense.
-- Why no `category_id`? A product can belong to many categories; that M:N is resolved by `product_categories`.
+There is no `category_id` column. Categories are attached in `product_categories`.
 
-### 6.2b Product Categories
+### Common mistake
 
-```sql
-CREATE TABLE product_categories (
-    product_id  INTEGER NOT NULL
-                REFERENCES products(product_id) ON DELETE CASCADE,
-    category_id INTEGER NOT NULL
-                REFERENCES categories(category_id) ON DELETE CASCADE,
-    PRIMARY KEY (product_id, category_id)
-);
-```
-
-**Self-review**:
-- Why a composite PK? So the same product cannot be listed twice in the same category.
-- Why `ON DELETE CASCADE` on both FKs? Link rows are meaningless without the product or the category; the other entity survives.
-- Why no extra columns? This is a pure junction — contrast with `order_items`, which stores quantity and unit_price.
-
-### 6.3 Customers
-
-```sql
-CREATE TABLE customers (
-    customer_id INTEGER GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
-    first_name  VARCHAR(100) NOT NULL,
-    last_name   VARCHAR(100) NOT NULL,
-    email       VARCHAR(255) NOT NULL UNIQUE,
-    created_at  TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
-);
-```
-
-**Self-review**:
-- Why is `email` UNIQUE? Each customer account must have a distinct email.
-- Why separate `first_name` and `last_name`? To allow sorting, searching, and addressing by either part.
-- Why NOT NULL on names? A customer without a name is not a valid customer.
-
-### 6.4 Orders
-
-```sql
-CREATE TABLE orders (
-    order_id     INTEGER GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
-    customer_id  INTEGER NOT NULL REFERENCES customers(customer_id) ON DELETE RESTRICT,
-    order_date   TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    status       VARCHAR(20) NOT NULL DEFAULT 'pending'
-                 CHECK (status IN ('pending', 'shipped', 'delivered', 'cancelled')),
-    total_amount NUMERIC(10,2) NOT NULL DEFAULT 0 CHECK (total_amount >= 0)
-);
-```
-
-**Self-review**:
-- Why `ON DELETE RESTRICT`? You should not delete a customer who has order history — that data is valuable.
-- Why is `status` constrained with CHECK? To prevent invalid status values like "maybe" or "xyz".
-- Why is `total_amount` denormalized here? For performance — avoids recalculating from order_items on every read. This is a deliberate denormalization.
-
-### 6.5 Order Items
-
-```sql
-CREATE TABLE order_items (
-    order_id   INTEGER NOT NULL REFERENCES orders(order_id) ON DELETE CASCADE,
-    product_id INTEGER NOT NULL REFERENCES products(product_id) ON DELETE RESTRICT,
-    quantity   INTEGER NOT NULL CHECK (quantity > 0),
-    unit_price NUMERIC(10,2) NOT NULL CHECK (unit_price >= 0),
-    PRIMARY KEY (order_id, product_id)
-);
-```
-
-**Self-review**:
-- Why composite PK? This is a junction table resolving the M:N between orders and products.
-- Why `ON DELETE CASCADE` for order? If an order is deleted, its line items are meaningless alone.
-- Why `ON DELETE RESTRICT` for product? Deleting a product that was once ordered would destroy history.
-- Why store `unit_price` here? Because product prices change over time — we freeze the price at the moment of purchase.
-- Why `CHECK (quantity > 0)`? An order item with zero or negative quantity is invalid.
-
-### 6.6 Payments
-
-```sql
-CREATE TABLE payments (
-    payment_id     INTEGER GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
-    order_id       INTEGER NOT NULL UNIQUE REFERENCES orders(order_id) ON DELETE CASCADE,
-    amount         NUMERIC(10,2) NOT NULL CHECK (amount > 0),
-    payment_method VARCHAR(50) NOT NULL
-                   CHECK (payment_method IN ('credit_card', 'debit_card', 'bank_transfer', 'cash')),
-    payment_date   TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
-);
-```
-
-**Self-review**:
-- Why `UNIQUE` on `order_id`? Each order has at most one payment (1:1 relationship).
-- Why `ON DELETE CASCADE`? If an order is deleted, the payment record goes with it.
-- Why `CHECK (amount > 0)`? A payment of zero or negative makes no sense.
-- Why constrain `payment_method`? To limit values to supported payment types.
+Storing a price in a floating-point column, or placing the foreign key on the "one" side of a 1:N relationship. The order belongs to one customer, so `customer_id` belongs on `orders`.
 
 ---
 
-## 7 — Peer Review Guidelines
+## 5. Week 45 — Normalization
 
-### 7.1 Before You Start
+### The idea
 
-Before reviewing a peer's design:
+Normalization organizes tables so each fact is stored once. Redundancy produces three **anomalies**:
 
-1. Read their requirements document first — understand what the database is supposed to do
-2. Look at their ER diagram — understand the conceptual model
-3. Only then look at the SQL implementation
-4. Keep the requirements open while reviewing — everything should trace back to them
+| Anomaly | What happens |
+| --- | --- |
+| Insertion | You cannot store a fact on its own. A new product cannot be recorded until somebody orders it, because the product columns live only on the order row |
+| Update | The same fact is copied on many rows. Changing a customer's email means changing every copy, and a missed row leaves two emails |
+| Deletion | Removing a row removes an unrelated fact. Deleting the only order for a product also deletes the product |
 
-### 7.2 What to Look For
+**Normal forms**
 
-When reviewing, check each of these areas:
+| Form | Rule |
+| --- | --- |
+| **1NF** | Values are atomic, there are no repeating groups (`phone1`, `phone2`, or a comma-separated list), and the table has a primary key |
+| **2NF** | 1NF, and every non-key column depends on the **whole** primary key. A **partial dependency** is a non-key column that depends on only part of a composite key. A single-column primary key cannot have a partial dependency |
+| **3NF** | 2NF, and no non-key column depends on another non-key column. That indirect link is a **transitive dependency** |
 
-1. **Completeness**: Does the schema support all stated requirements?
-2. **Key design**: Does every table have an appropriate primary key?
-3. **Relationships**: Are all FK constraints present and correct?
-4. **Constraints**: Are business rules enforced with CHECK, NOT NULL, UNIQUE?
-5. **Normalization**: Is the schema in 3NF (or are deviations justified)?
-6. **Naming**: Are conventions consistent throughout?
-7. **Data types**: Are types appropriate for the data?
-8. **ON DELETE**: Are referential actions chosen deliberately?
+The short form: every non-key column depends on the key, the whole key, and nothing but the key.
 
-### 7.3 How to Give Feedback
+**Worked dependencies**
 
-Good feedback is:
+- `order_items` with primary key (`order_id`, `product_id`): `quantity` depends on the whole key. `name` and the catalog `price` depend only on `product_id`, so they belong on `products`, not on the line.
+- A table `products(product_id, name, category_id, category_name)` has a transitive dependency: `category_name` depends on `category_id`. The category name moves to `categories`. In TrailShop the link is M:N, so the product does not keep `category_id` either. The pair of keys moves to `product_categories`.
 
-- **Specific**: Point to the exact table, column, or constraint
-- **Explanatory**: Say *why* something is a problem, not just *that* it is
-- **Constructive**: Suggest an improvement, don't just criticize
-- **Respectful**: Acknowledge good decisions alongside problems
-- **Prioritized**: Focus on correctness issues before style preferences
+**When a repeated value is still correct.** `order_items.unit_price` is the price charged on that order. It is a different fact from `products.price`, which is today's catalog price. Keeping the snapshot is required history. It is not a 3NF violation.
 
-### 7.4 Sample Review Comments
+**When not to normalize further.** Design the transactional schema to 3NF first. A later, measured performance problem, or a reporting database loaded in batches, may justify a controlled copy of a value. Reaching 3NF is enough for this course. Boyce–Codd normal form is a stricter form that this exam does not ask you to apply.
 
-**Bad feedback**:
-> "Your schema is wrong."
+### TrailShop example
 
-**Good feedback**:
-> "In the `orders` table, `customer_id` has no FOREIGN KEY constraint. This means the database would allow orders referencing non-existent customers. Add: `REFERENCES customers(customer_id) ON DELETE RESTRICT`."
+`product_categories` stores only the two keys. Both columns are in the primary key, so there is no non-key column that could depend on part of the key. `orders` stores `customer_id`, `order_date`, and `status`, each depending on `order_id`. The customer's name stays on `customers`.
 
-**Bad feedback**:
-> "Use better names."
+### Common mistake
 
-**Good feedback**:
-> "The column `dt` in the `orders` table is unclear — consider renaming to `order_date` so the meaning is obvious without looking at documentation."
+Removing `unit_price` from `order_items` in the name of normalization, or claiming a partial dependency in a table whose primary key is one column.
 
-**Bad feedback**:
-> "This is not normalized."
+---
 
-**Good feedback**:
-> "The `products` table has `category_name` alongside `category_id`. Since `category_name` depends on `category_id` (not on `product_id`), this is a transitive dependency violating 3NF. Remove `category_name` and join to the `categories` table when you need it."
+## 6. The Design Pipeline
 
-### 7.5 Peer Review Template
-
-Use this structure when writing a peer review:
+Use this order when a question gives you a description and asks for a schema.
 
 ```
-## Peer Review: [Project Name]
-Reviewer: [Your name]
-Date: [Date]
-
-### Overall Impression
-[1-2 sentences on the overall quality and completeness]
-
-### Strengths
-- [Good decision 1]
-- [Good decision 2]
-
-### Issues Found
-
-#### Issue 1: [Title]
-- **Location**: [Table/column]
-- **Problem**: [What is wrong and why it matters]
-- **Suggestion**: [How to fix it]
-
-#### Issue 2: [Title]
-...
-
-### Minor Suggestions
-- [Style/naming preferences — lower priority]
-
-### Summary
-[1-2 sentences final assessment]
+Requirements → ER model → Logical tables → 3NF check → CREATE TABLE
 ```
+
+1. **Requirements.** List the things you must remember and the questions the database must answer.
+2. **ER model.** Name entities, attributes, and both directions of each relationship. Resolve every M:N with a junction.
+3. **Logical tables.** Apply the Week 39 rules. Choose types and constraints. Put each foreign key on the "many" side.
+4. **3NF check.** For each table, name the primary key and confirm every other column depends on the whole key and nothing else. Keep historical snapshots, and say why.
+5. **Implementation.** Write `CREATE TABLE` in dependency order, with `ON DELETE` and `ON UPDATE` actions you can justify.
+
+Early mistakes are cheap. A missing entity in the ER model becomes a missing table, and the database cannot answer the question that entity existed to answer.
+
+---
+
+## 7. Design Checklist
+
+Use this on any schema, including your own TrailShop database and the Week 49 exercises.
+
+**Entities and cardinalities**
+
+- Every thing the requirements mention is an entity, or is an attribute of one.
+- Each relationship has a cardinality in both directions, checked with one concrete example.
+- Every M:N relationship has a junction. `products` has no `category_id`.
+- Participation is reflected in `NOT NULL` where the DBMS can enforce it.
+
+**Keys and foreign keys**
+
+- Every table has a primary key. No part of it is nullable.
+- Foreign keys reference a real key, and parent tables can be created first.
+- A 1:1 link is enforced with `UNIQUE` on the foreign key (`payments.order_id`).
+- Junction tables use the two foreign keys as the primary key when the pair itself is the identity.
+
+**Data types and constraints**
+
+- Money is `NUMERIC`, not a floating-point type.
+- Text lengths, checks, and defaults match a stated business rule.
+- `ON DELETE` is a choice you can explain: `RESTRICT` when the history must survive, `CASCADE` when the child cannot exist without the parent.
+
+**Third normal form**
+
+- No repeating groups or lists in a cell.
+- No partial dependencies on composite keys.
+- No transitive dependencies.
+- Any copied value is a different fact, such as `order_items.unit_price`, and is labelled as such.
+
+---
+
+## 8. TrailShop Schema at a Glance
+
+This is the schema the rest of the course uses. Column names here are the ones to use in exam answers about TrailShop.
+
+| Table | Primary key | Foreign keys and notes |
+| --- | --- | --- |
+| `categories` | `category_id` | `category_name` is `UNIQUE` |
+| `customers` | `customer_id` | `email` is `UNIQUE`. Address is `street`, `city`, `postal_code`, `country` |
+| `products` | `product_id` | `name`, `price`, `weight_kg`, `stock_quantity`. No category column |
+| `product_categories` | (`product_id`, `category_id`) | Pure junction for Category M:N Product. Both foreign keys `ON DELETE CASCADE` |
+| `orders` | `order_id` | `customer_id` `NOT NULL`, `ON DELETE RESTRICT`. `status` is checked against a list |
+| `order_items` | (`order_id`, `product_id`) | `quantity`, `unit_price` (price at order time). Deleting an order cascades to its lines. Deleting a product is restricted while a line still references it |
+| `payments` | `payment_id` | `order_id` is `NOT NULL UNIQUE`, so one payment per order |
 
 ---
 
 ## Key Terms
 
-A master glossary of database design terms used throughout this course:
-
-| Term | Definition |
-|------|-----------|
-| **Entity** | A real-world object or concept represented in the database (e.g., Customer, Product) |
-| **Attribute** | A property or characteristic of an entity (e.g., name, email, price) |
-| **Relation** | A table in the relational model — a set of tuples with the same structure |
-| **Tuple** | A single row in a relation; one instance of an entity |
-| **Primary Key (PK)** | A column (or set of columns) that uniquely identifies each row in a table |
-| **Foreign Key (FK)** | A column that references the primary key of another table, enforcing a relationship |
-| **Candidate Key** | Any column or combination that could serve as the primary key (unique, not null) |
-| **Composite Key** | A primary key made of two or more columns together |
-| **Surrogate Key** | An artificial key with no business meaning (e.g., auto-generated integer) |
-| **Natural Key** | A key with real-world meaning (e.g., email, social security number) |
-| **Domain** | The set of allowed values for a column (data type + constraints) |
-| **First Normal Form (1NF)** | Every column holds atomic values; no repeating groups |
-| **Second Normal Form (2NF)** | 1NF + no partial dependencies on composite keys |
-| **Third Normal Form (3NF)** | 2NF + no transitive dependencies between non-key columns |
-| **Boyce-Codd Normal Form (BCNF)** | A stricter form of 3NF. Reaching 3NF is enough for this course |
-| **Normalization** | The process of organizing tables to reduce redundancy and dependency anomalies |
-| **Denormalization** | Deliberately introducing redundancy for performance, with documented justification |
-| **ER Diagram** | A visual model showing entities, their attributes, and relationships between them |
-| **Cardinality** | The number of instances in one entity that relate to instances of another (1:1, 1:N, M:N) |
-| **Participation** | Whether every instance must participate in a relationship (total) or may not (partial) |
-| **Junction Table** | A table that resolves a many-to-many relationship by holding two foreign keys |
-| **Referential Integrity** | The guarantee that every foreign key value points to an existing row in the referenced table |
-| **Constraint** | A rule enforced by the database (PK, FK, NOT NULL, UNIQUE, CHECK, DEFAULT) |
-| **DDL** | Data Definition Language — SQL commands that define structure (CREATE, ALTER, DROP) |
-| **DML** | Data Manipulation Language — SQL commands that modify data (INSERT, UPDATE, DELETE) |
-| **Schema** | The complete structure of a database — all tables, columns, types, and constraints |
-| **Anomaly** | A problem caused by poor design: insertion, update, or deletion anomaly |
-| **Redundancy** | The same fact stored in multiple places — leads to anomalies |
-
----
-
-## Reading Assignments
-
-### Required Review
-
-- Watt, A. & Eng, N. (2014). *Database Design — 2nd Edition*. BCcampus Open Education.
-  - Chapter 7: The Relational Data Model
-  - Chapter 8: Entity-Relationship Model (review)
-  - Chapter 9: Mapping ER Models to Relational Schemas
-  - Chapter 12: Normalization
-
-### PostgreSQL Documentation
-
-- [CREATE TABLE](https://www.postgresql.org/docs/current/sql-createtable.html) — complete DDL syntax
-- [Constraints](https://www.postgresql.org/docs/current/ddl-constraints.html) — all constraint types
-- [Data Types](https://www.postgresql.org/docs/current/datatype.html) — type reference
-
----
-
-## Further Reading
-
-- Your own course project documentation — review it with the design quality checklist from Section 5
-- Compare your project schema against the TrailShop reference schema in Section 6 for patterns and completeness
+| Term | Meaning |
+| --- | --- |
+| Database | A shared collection of related data, designed for a purpose |
+| DBMS | Software that defines, stores, and controls the database |
+| Three-schema architecture | External, conceptual, and internal levels |
+| Candidate key | A minimal identifier of each row |
+| Primary key | The chosen candidate key |
+| Foreign key | A value that must match a key in the referenced table |
+| Entity integrity | The primary key is unique and not null |
+| Referential integrity | A foreign key matches an existing key, or is null when allowed |
+| Cardinality | How many instances of each entity a relationship allows |
+| Participation | Whether every instance must take part |
+| Junction table | The table that represents an M:N relationship |
+| Partial dependency | A non-key column depends on part of a composite key |
+| Transitive dependency | A non-key column depends on another non-key column |
+| 1NF, 2NF, 3NF | Atomic values; then no partial dependencies; then no transitive dependencies |
+| Anomaly | An insertion, update, or deletion problem caused by redundancy |
 
 ---
 
 ## Summary
 
-You have now reviewed the complete database design pipeline — from requirements through ER modelling, logical design, normalization, and implementation. You have a quality checklist to evaluate any schema, a complete reference implementation in TrailShop, and guidelines for giving and receiving peer feedback.
-
-The key insight of this lecture: **good design is not about knowing the rules — it is about applying them systematically and catching mistakes before they become expensive to fix.**
-
-Week 50 offers an optional SQL reference and practice queries. Week 51 is the final exam.
+- Weeks 36 and 37 give the reason for a database and the rules that make tables trustworthy: one place for each fact, keys, `NULL`, and the two integrity rules.
+- Weeks 38 and 39 turn requirements into an ER model and then into tables. 1:N puts a foreign key on the many side. M:N becomes a junction. TrailShop's categories are M:N through `product_categories`.
+- Week 45 checks the result. Reach 3NF, keep `order_items.unit_price` as the price that was charged, and explain any later copy of a value as a deliberate exception.
+- The checklist in Section 7 is the order to follow in a design question: cardinalities, keys, types, constraints, then normal form.
