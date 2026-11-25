@@ -1,1500 +1,521 @@
-# Week 47 — Indexes and Query Performance
+[Week47_Exercises.md](https://github.com/user-attachments/files/35434730/Week47_Exercises.md)
+# Week 47 — Exercises: Indexes and Query Performance
 
-## Chapter 11: "The Slowdown"
+> 
+> **_How to Complete These Exercises_**
+> Write your answers directly in the highlighted **Your Answer** / **Your SQL** fields below each task. Replace the placeholder text with your own work before submitting.
 
-TrailShop has grown from a small outdoor gear startup into a thriving e-commerce business. The products table has swelled to over 200,000 rows. The orders table holds millions of records spanning years of transactions. Customers are complaining that the search page takes forever to load, the admin dashboard freezes when staff try to pull sales reports, and the checkout process occasionally times out. The founders are panicking — they want to throw money at a bigger server.
-
-But you know better. The problem isn't hardware — it's how the database is *finding* data. Right now, every query forces PostgreSQL to read every single row in the table, even when it only needs one. That's like searching for a word in a 1,000-page book by reading every page from start to finish. What you need is an *index* — and this week, you're going to learn how to build them, when to use them, and how to prove they work using PostgreSQL's query planner.
-
----
-
-## Learning Objectives
-
-By the end of this chapter you will be able to:
-
-- Explain why queries slow down as tables grow
-- Describe what an index is and how it maps values to row locations
-- Explain how B-tree indexes achieve O(log n) lookup performance
-- Identify and compare PostgreSQL's index types (B-tree, Hash, GIN, GiST, BRIN, SP-GiST)
-- Create basic, unique, multi-column, partial, expression, and covering indexes
-- Explain which indexes PostgreSQL creates automatically and which it does not
-- Read and interpret EXPLAIN and EXPLAIN ANALYZE output
-- Distinguish between Seq Scan, Index Scan, Index Only Scan, and Bitmap scans
-- Compare Nested Loop, Hash Join, and Merge Join algorithms
-- Decide when to create indexes and when to avoid them
-- Monitor and maintain indexes over time
-- Apply general query optimization techniques beyond indexing
+These exercises walk you through measuring, creating, and evaluating indexes on your TrailShop database. You will use PostgreSQL's `EXPLAIN ANALYZE` to gather real execution data and make evidence-based decisions about indexing.
 
 ---
 
-## How to Study This Chapter
+## 1. TrailShop Project Task
 
-The fundamentals are the focus. The advanced sections are helpful once those are solid.
+### Step 1 — Baseline Measurement
 
-### Fundamentals — focus here
+Before creating any indexes, run `EXPLAIN ANALYZE` on the following five queries. For each, record the **scan type**, **execution time (ms)**, and **rows removed by filter**.
 
-- **Why queries slow down** (section 1): sequential scan and O(n) growth.
-- **What an index is** (section 2): a separate structure that maps values to rows.
-- **B-trees at the level you will use** (sections 3.1–3.3): the default index, the tree idea, and the O(log n) comparison table, including about 20 lookups for one million rows.
-- **B-tree as the index you create** (section 4.1).
-- **Indexes you will write and explain** (sections 5.1–5.4 and 5.6): basic, unique, multi-column with the leftmost prefix, partial, and covering indexes (`INCLUDE`) as the way an Index Only Scan gets its columns.
-- **Automatic indexes** (section 6): primary keys and `UNIQUE` get an index; foreign keys do not.
-- **Reading a plan** (sections 7.1–7.3 and 7.6): `EXPLAIN` versus `EXPLAIN ANALYZE`, what cost, rows, time, and rows removed by filter mean, and that `EXPLAIN ANALYZE` really runs `INSERT`, `UPDATE`, and `DELETE`.
-- **The scans to recognize** (sections 8.1–8.3 and the comparison in 8.5): Seq Scan, Index Scan, and Index Only Scan.
-- **The before/after pattern** (sections 10.1–10.2): a lookup by name, and an index on a foreign key.
-- **When to create an index, and when not to** (sections 11 and 12).
-- **Query habits that keep indexes useful** (sections 14.1 and 14.3): avoid `SELECT *`, and do not wrap an indexed column in a function.
+`
 
-### Advanced — extra and helpful
+--
+Record your results in a table like this:
 
-> [!TIP]
-> **Advanced.** Helpful extra. Read this after the fundamentals are solid.
+| Query | Scan Type | Exec Time (ms) | Rows Removed by Filter |
+| ----- | --------- | -------------- | ---------------------- |
+| A     |           |                |                        |
+| B     |           |                |                        |
+| C     |           |                |                        |
+| D     |           |                |                        |
+| E     |           |                |                        |
+
+### Step 2 — Create Indexes
+
+Now create the following indexes:
+
+```sql
+CREATE INDEX idx_product_name ON products (name);
+CREATE INDEX idx_order_item_order_id ON order_items (order_id);
+CREATE INDEX idx_order_item_product_id ON order_items (product_id);
+CREATE INDEX idx_orders_customer_id ON orders (customer_id);
+CREATE INDEX idx_product_categories_category_id ON product_categories (category_id);
+```
+
+### Step 3 — Re-measure
+
+Because the project database is so small, the PostgreSQL optimizer will most likely default to Seq Scan even after creating indexes.
+
+You can force PostgreSQL to use indexes by disabling the Seq scan using following commands:
+
+```sql
+
+
+Run the same five queries with `EXPLAIN ANALYZE` again. Fill in your comparison table:
+
+| Query | Before Scan | Before Time (ms) | After Scan | After Time (ms) | Improvement Factor |
+| ----- | ----------- | ---------------- | ---------- | --------------- | ------------------ |
+| A     |             |                  |            |                 |                    |
+| B     |             |                  |            |                 |                    |
+| C     |             |                  |            |                 |                    |
+| D     |             |                  |            |                 |                    |
+| E     |             |                  |            |                 |                    |
+
+### Step 4 — Recommendation
+
+Write a paragraph (4–6 sentences) recommending which indexes to keep in production and why. Consider table size, query frequency, and write overhead. If any index showed minimal improvement, explain why you might drop it.
+
+> [!NOTE]
+> **_Your Answer_**
 >
-> - **B-tree internals** (sections 3.4–3.5): 8 KB pages and why the tree stays balanced.
-> - **Other index types** (sections 4.2–4.7): Hash, GIN, GiST, BRIN, SP-GiST, and the comparison table.
-> - **Other index forms** (sections 5.5, 5.7, and 5.8): expression indexes, the full `CREATE INDEX` syntax, and `CONCURRENTLY`.
-> - **Plan extras** (sections 7.4–7.5): `BUFFERS`, and JSON / YAML output.
-> - **Bitmap scans** (section 8.4).
-> - **Join algorithms** (all of section 9): Nested Loop, Hash Join, and Merge Join.
-> - **The join before/after example** (section 10.3).
-> - **Index maintenance** (all of section 13): `VACUUM`, `REINDEX`, and the monitoring queries.
-> - **Other query tips** (sections 14.2, 14.4, 14.5, and 14.6): `EXISTS` versus `IN`, `LIMIT` with `ORDER BY`, materialized views, and the `ANALYZE` command.
+> Baseline measurements must be taken from my own PostgreSQL database. I will run the five EXPLAIN ANALYZE queries and copy the scan type, execution time, and rows removed by filter into the table.
 
 ---
 
-## 1 — Why Queries Slow Down
+## 2. Theory Review
 
-> **Fundamentals.** This whole section is core: sequential scans and why they slow down as tables grow.
+Answer the following questions in your own words. See the corresponding theory sections for reference.
 
-### 1.1 Sequential Scan: Reading Everything
+**Question 1** — What is a database index, and why is it needed? (See Theory Section 1)
 
-When you run a query like this:
+
+> 
+>
+ The indexes on products.name, order_items.order_id, order_items.product_id, orders.customer_id, and product_categories.category_id are useful for the searches and joins in these queries. They can become more helpful when the tables get bigger and the queries are used often. However, indexes also use storage and make INSERT, UPDATE, and DELETE a little more expensive. If an index gives almost no benefit because the table is very small, I would consider removing it.
+
+**Question 2** — Explain the difference between B-tree search at O(log n) and sequential scan at O(n). If a table has 1,000,000 rows, approximately how many comparisons does each approach need? (See Theory Section 2)
+
+> [!NOTE]
+> **_Your Answer_**
+>
+> An index is a data structure that helps PostgreSQL find rows faster. It is similar to the index of a book because PostgreSQL does not always have to check every row. Indexes are especially useful for large tables and common search queries.
+
+**Question 3** — PostgreSQL automatically creates indexes on primary keys. Why doesn't it also auto-index foreign key columns? (See Theory Section 3)
+
+> [!NOTE]
+> **_Your Answer_**
+>
+> A B-tree search is O(log n), while a sequential scan is O(n). With 1,000,000 rows, a B-tree needs about log2(1,000,000), which is around 20 comparisons. A sequential scan may need to check up to about 1,000,000 rows. So the B-tree can be much faster when only a few rows are needed.
+
+**Question 4** — What is the difference between an Index Scan and an Index Only Scan? When can PostgreSQL use Index Only Scan? (See Theory Section 4)
+
+>
+> Answer_
+>
+> PostgreSQL automatically creates an index for a primary key, but it does not automatically create one for every foreign key. Not every foreign key needs an index, and creating all of them would use extra storage and make writes slower. We can add an index when the foreign key is often used in searches or joins.
+
+**Question 5** — Give three situations where you should NOT create an index. Explain each briefly. (See Theory Section 5)
+
+> 
+>  Answer
+>
+> An Index Scan uses an index to find the rows, but PostgreSQL may still need to read the table to get other columns. An Index Only Scan can get all required columns from the index itself. PostgreSQL can use it when the index contains all the columns needed by the query and the visibility information allows it.
+
+**Question 6** — What does `EXPLAIN ANALYZE` show that plain `EXPLAIN` does not? Why does this matter? (See Theory Section 6)
+
+> 
+> Your Answer
+>
+> I would not create an index on a very small table because a sequential scan may already be fast. I would also avoid an index on a column with very few different values if many rows have the same value. Finally, I would avoid creating too many indexes on columns that change often because INSERT, UPDATE, and DELETE operations have to maintain the indexes.
+
+**Question 7** — What is a partial index? Give one concrete example where a partial index on a TrailShop table would be useful. (See Theory Section 7)
+
+> 
+> 
+>
+> EXPLAIN shows the execution plan PostgreSQL expects to use. EXPLAIN ANALYZE actually runs the query and shows real information such as execution time and actual rows. This is useful because the real result can be different from PostgreSQL's estimates, so it helps us check if an index really improves performance.
+
+**Question 8** — What is the leftmost prefix rule for multi-column indexes? If you create `CREATE INDEX idx ON orders (customer_id, order_date)`, which of the following queries can use the index and why?
 
 ```sql
-SELECT * FROM products WHERE name = 'TrailMaster X4';
+-- a)
+SELECT * FROM orders WHERE customer_id = 5;
+-- b)
+SELECT * FROM orders WHERE order_date = '2026-01-15';
+-- c)
+SELECT * FROM orders WHERE customer_id = 5 AND order_date = '2026-01-15';
 ```
 
-PostgreSQL must find rows that match the condition. Without an index, it has only one option: start at the first row of the table and check every single row until it reaches the end. This is called a **sequential scan** (Seq Scan).
+(See Theory Section 8)
 
-For a small table with 50 products, this is instant. But what happens when the table grows?
+> 
+> 
+>
+> A partial index is an index that contains only rows that match a condition. For example, if TrailShop often searches for pending orders, this index could be useful:
 
-### 1.2 O(n) Growth
+```
 
-A sequential scan has **O(n)** time complexity — the time it takes is directly proportional to the number of rows. If your table doubles in size, the query takes roughly twice as long.
+```
 
-| Rows in `products` | Approximate Seq Scan Time |
-|---|---|
-| 1,000 | 1 ms |
-| 100,000 | 50 ms |
-| 1,000,000 | 400 ms |
-| 10,000,000 | 4,000 ms (4 seconds) |
-| 100,000,000 | 40,000 ms (40 seconds) |
-
-These are rough estimates to illustrate the trend. The exact times depend on hardware, row size, and caching — but the linear relationship holds.
-
-### 1.3 The Library Analogy
-
-Imagine you need to find a specific book in a library with 100,000 books. Without any catalog system, you'd have to walk through every shelf, check every spine, one by one. That could take hours.
-
-But if the library has a card catalog — an alphabetical index that tells you the exact shelf and position — you can go straight to the book. That's what a database index does: it provides a shortcut so the database doesn't have to read everything.
-
-As Watt & Eng note in *Database Design — 2nd Edition*: "Without indexes, the DBMS must perform a full table scan for every query, which becomes impractical as tables grow beyond a few thousand rows."
+It is smaller than a full index on the table and can make searches for pending orders faster.
 
 ---
 
-## 2 — What Is an Index?
+## 3. EXPLAIN Reading Exercise (Optional)
 
-> **Fundamentals.** This whole section is core: an index is a separate structure that maps values to rows.
+> [!TIP]
+> **Recommended practice.** Do this section. It is not required to finish the TrailShop project. It prepares you for the exams.
 
-### 2.1 The Book Index Analogy
+Below are four `EXPLAIN ANALYZE` outputs. For each one, identify:
 
-A book index sits at the back and lists important terms in alphabetical order, each followed by page numbers where that term appears. You look up the term, get the page number, and flip directly to it.
+1. The scan type used
+2. Estimated rows vs actual rows
+3. Total execution time
+4. Whether an index would help (and which column to index)
 
-A database index works the same way:
+### Output A — Sequential Scan
 
-1. It stores **values** from one or more columns (like the terms in a book index)
-2. Each value is paired with a **pointer** to the actual row on disk (like page numbers)
-3. The values are organized in a structure that allows fast lookup (like alphabetical order)
+```
 
-### 2.2 A Separate Data Structure
+```
 
-An index is **not** part of the table itself. It's a separate data structure that PostgreSQL maintains alongside the table. When you insert, update, or delete rows, PostgreSQL must also update every index on that table. This is the fundamental trade-off: indexes speed up reads but add overhead to writes.
 
-### 2.3 How an Index Maps Values to Rows
 
-Consider the `products` table:
+- Scan type:
+- Estimated vs actual rows:
+- Execution time:
+- Would an index help? Which one?
 
-| product_id | name | price | stock_quantity |
-|---|---|---|---|
-| 1 | TrailMaster X4 | 149.99 | 12 |
-| 2 | Alpine Tent Pro | 299.00 | 8 |
-| 3 | Summit Harness | 89.50 | 25 |
-| 4 | Canyon Boots | 179.99 | 15 |
-| 5 | RidgeLine Pack | 129.00 | 20 |
+> [!NOTE]
+> **_Your Answer_**
+>
+> The leftmost prefix rule means that PostgreSQL can use the beginning of a multi-column index. For `CREATE INDEX idx ON orders (customer_id, order_date)`, query (a) can use the index because it uses `customer_id`, which is the first column. Query (b) normally cannot use this index effectively because it only uses `order_date`, the second column. Query (c) can use the index because it uses both columns starting with `customer_id`.
 
-An index on the `name` column would conceptually look like:
+### Output B — Index Scan
 
-| Index Entry (name) | Pointer to Row |
-|---|---|
-| Alpine Tent Pro | → Row 2 |
-| Canyon Boots | → Row 4 |
-| RidgeLine Pack | → Row 5 |
-| Summit Harness | → Row 3 |
-| TrailMaster X4 | → Row 1 |
+```
 
-Notice that the index entries are **sorted**. This sorted order is what makes fast lookups possible — the database can use algorithms like binary search instead of checking every entry.
+**Your analysis:**
+
+- Scan type:
+- Estimated vs actual rows:
+- Execution time:
+- Is the index effective here?
+
+> 
+> 
+>
+> Scan type: Sequential Scan on products.
+
+Estimated vs actual rows: estimated 5 rows, actual 3 rows.
+
+Execution time: 0.312 ms.
+
+An index on `products(category_id)` could help when the table is large and this search is common. For the small table in this example, the sequential scan may still be faster.
+
+### Output C — Bitmap Index Scan
+
+```
+Bitmap Heap Scan on order_items  (cost=4.32..35.76 rows=25 width=24) (actual time=0.045..0.098 rows=28 loops=1)
+  Recheck Cond: (product_id = 15)
+  Heap Blocks: exact=12
+  ->  Bitmap Index Scan on idx_order_item_product_id  (cost=0.00..4.31 rows=25 width=0) (actual time=0.030..0.030 rows=28 loops=1)
+        Index Cond: (product_id = 15)
+Planning Time: 0.091 ms
+Execution Time: 0.132 ms
+```
+
+**Your analysis:**
+
+- Scan type:
+- Estimated vs actual rows:
+- Execution time:
+- Why did PostgreSQL choose a Bitmap scan instead of a plain Index Scan?
+
+> [!NOTE]
+> **_Your Answer_**
+>
+> Scan type: Index Scan using `idx_orders_customer_id`.
+
+Estimated vs actual rows: estimated 1 row, actual 4 rows.
+
+Execution time: 0.041 ms.
+
+Yes, the index is effective here because PostgreSQL can use `customer_id` to find the matching orders without scanning the whole table.
+
+### Output D — Hash Join
+
+```
+Hash Join  (cost=33.50..75.82 rows=120 width=52) (actual time=0.452..1.205 rows=115 loops=1)
+  Hash Cond: (oi.product_id = p.id)
+  ->  Seq Scan on order_items oi  (cost=0.00..30.40 rows=2040 width=16) (actual time=0.008..0.195 rows=2040 loops=1)
+  ->  Hash  (cost=20.00..20.00 rows=500 width=40) (actual time=0.410..0.411 rows=500 loops=1)
+        Buckets: 1024  Batches: 1  Memory Usage: 45kB
+        ->  Seq Scan on products p  (cost=0.00..20.00 rows=500 width=40) (actual time=0.005..0.180 rows=500 loops=1)
+Planning Time: 0.215 ms
+Execution Time: 1.340 ms
+```
+
+**Your analysis:**
+
+- Scan type:
+- Estimated vs actual rows:
+- Execution time:
+- Would adding an index improve this join? Which column?
+
+> [!NOTE]
+> **_Your Answer_**
+>
+> Scan type: Bitmap Heap Scan with a Bitmap Index Scan underneath.
+
+Estimated vs actual rows: estimated 25 rows, actual 28 rows.
+
+Execution time: 0.132 ms.
+
+PostgreSQL chose a bitmap scan because there are several matching rows. It can first collect the matching row locations with the index and then read the required table pages together. This can be more efficient than doing many separate index lookups.
 
 ---
 
-## 3 — B-Tree Indexes
-
-> **Mixed.** Sections 3.1–3.3 are fundamentals: the default B-tree, how the tree is searched, and O(log n). Sections 3.4–3.5 (pages and why the tree stays balanced) are advanced.
-
-### 3.1 The Default Index Type
-
-When you create an index in PostgreSQL without specifying a type, you get a **B-tree** (balanced tree) index. B-tree is the most versatile and commonly used index type, supporting equality (`=`) and range queries (`<`, `>`, `<=`, `>=`, `BETWEEN`).
-
-```sql
-CREATE INDEX idx_products_name ON products(name);
-```
-
-This creates a B-tree index by default.
-
-### 3.2 How B-Trees Work
-
-A B-tree organizes data into a tree structure with three levels of nodes:
-
-- **Root node**: The single top node, the entry point for every search
-- **Internal nodes**: Intermediate nodes that guide the search downward
-- **Leaf nodes**: The bottom level, containing the actual indexed values and pointers to table rows
-
-Here's a simplified ASCII representation of a B-tree index on `product_id`:
-
-```
-                        [50]                          ← Root
-                       /    \
-                      /      \
-              [20, 35]        [70, 85]                ← Internal
-              /  |  \         /  |   \
-             /   |   \       /   |    \
-          [1-19][20-34][35-49] [50-69][70-84][85-100]  ← Leaf nodes
-```
-
-To find `product_id = 42`:
-
-1. Start at root: 42 < 50, go left
-2. At internal node: 42 > 35, go right
-3. At leaf node [35–49]: find 42, follow pointer to the table row
-
-That's **3 steps** to search through 100 values. A sequential scan would need up to 100 steps.
-
-### 3.3 O(log n) Lookup
-
-B-trees provide **O(log n)** lookup time. This is dramatically better than O(n) for large tables:
-
-| Table Rows | Seq Scan Comparisons (O(n)) | B-tree Lookups (O(log n)) |
-|---|---|---|
-| 1,000 | 1,000 | ~10 |
-| 100,000 | 100,000 | ~17 |
-| 1,000,000 | 1,000,000 | ~20 |
-| 10,000,000 | 10,000,000 | ~23 |
-| 100,000,000 | 100,000,000 | ~27 |
-| 1,000,000,000 | 1,000,000,000 | ~30 |
-
-Even with a billion rows, a B-tree index finds any value in roughly 30 comparisons.
-
-### 3.4 Pages and Disk I/O (Advanced)
+## 4. Index Design Exercise (Optional)
 
 > [!TIP]
-> **Advanced.** Helpful extra. Read this after the fundamentals in this section are solid.
+> **Recommended practice.** Do this section. It is not required to finish the TrailShop project. It prepares you for the exams.
 
-PostgreSQL stores data in **8 KB pages** (also called blocks). Each B-tree node corresponds to one page on disk. A single page can hold hundreds of index entries, which is why real B-trees are very shallow — typically 3–4 levels deep even for tables with millions of rows.
+For each query below, recommend the best index(es), explain why, and predict the scan type PostgreSQL will use after indexing.
 
-Each level of the tree requires one **disk I/O** operation (reading one page). So finding a row in a million-row table might require only 3–4 disk reads instead of thousands.
-
-### 3.5 Why "Balanced" Matters (Advanced)
-
-> [!TIP]
-> **Advanced.** Helpful extra. Read this after the fundamentals in this section are solid.
-
-The "B" in B-tree stands for "balanced." Every path from the root to any leaf node has the **same length**. This guarantees that lookup time is consistent regardless of which value you're searching for. Unlike a simple binary search tree (which can become lopsided and degrade to O(n)), a B-tree automatically rebalances itself during insertions and deletions.
-
----
-
-## 4 — Index Types in PostgreSQL
-
-> **Mixed.** Section 4.1 (B-tree) is fundamental. Sections 4.2–4.7 (Hash, GIN, GiST, BRIN, SP-GiST, and the comparison) are advanced.
-
-PostgreSQL offers several index types, each optimized for different kinds of queries. Choosing the right type matters — using a B-tree where a GIN index is needed (or vice versa) can mean the difference between a fast query and a useless index.
-
-For comprehensive documentation, see: [https://www.postgresql.org/docs/current/indexes.html](https://www.postgresql.org/docs/current/indexes.html)
-
-### 4.1 B-Tree
-
-The default and most commonly used index type. Supports equality and range operators: `=`, `<`, `>`, `<=`, `>=`, `BETWEEN`, `IN`, `IS NULL`, `IS NOT NULL`. Also supports `LIKE 'prefix%'` (but not `LIKE '%suffix'`).
+**Query 1**
 
 ```sql
-CREATE INDEX idx_products_price ON products(price);
-
--- These queries can use the B-tree index:
-SELECT * FROM products WHERE price = 149.99;
-SELECT * FROM products WHERE price BETWEEN 100 AND 200;
-SELECT * FROM products WHERE price > 50 ORDER BY price;
+SELECT * FROM customers WHERE email = 'anna.korhonen@email.fi';
 ```
 
-**When to use**: Most situations. If you're unsure which type to pick, B-tree is almost always the right choice.
-
-### 4.2 Hash (Advanced)
-
-> [!TIP]
-> **Advanced.** Helpful extra. Read this after the fundamentals in this section are solid.
-
-Hash indexes use a hash function to map values to buckets. They support **only equality** comparisons (`=`).
+**Query 2**
 
 ```sql
-CREATE INDEX idx_products_name_hash ON products USING hash (name);
-
--- This query can use the hash index:
-SELECT * FROM products WHERE name = 'TrailMaster X4';
-
--- This query CANNOT use the hash index (range query):
-SELECT * FROM products WHERE name > 'M';
+SELECT * FROM orders WHERE customer_id = 5 ORDER BY order_date DESC;
 ```
 
-**When to use**: Rarely. Hash indexes are slightly faster than B-tree for pure equality lookups and use less space, but they don't support range queries, ordering, or multi-column indexes. In most cases, B-tree is a better overall choice.
-
-### 4.3 GIN (Generalized Inverted Index, Advanced)
-
-> [!TIP]
-> **Advanced.** Helpful extra. Read this after the fundamentals in this section are solid.
-
-GIN indexes are designed for values that contain multiple elements — arrays, JSONB documents, and full-text search vectors. They index each individual element and point back to the rows containing it.
-
-Imagine TrailShop adds a `tags` column to products:
+**Query 3**
 
 ```sql
-ALTER TABLE products ADD COLUMN tags TEXT[];
-
-UPDATE products SET tags = ARRAY['waterproof', 'hiking', 'bestseller']
-WHERE product_id = 1;
-
-UPDATE products SET tags = ARRAY['camping', 'lightweight', '4-season']
-WHERE product_id = 2;
-
--- Create a GIN index on the array column
-CREATE INDEX idx_products_tags ON products USING gin (tags);
-
--- Find all products tagged 'waterproof'
-SELECT * FROM products WHERE tags @> ARRAY['waterproof'];
+SELECT product_id, SUM(quantity) FROM order_items GROUP BY product_id;
 ```
 
-GIN is also the go-to index for full-text search:
+**Query 4**
 
 ```sql
-ALTER TABLE products ADD COLUMN search_vector tsvector;
-
-UPDATE products
-SET search_vector = to_tsvector('english', name || ' ' || COALESCE(description, ''));
-
-CREATE INDEX idx_products_search ON products USING gin (search_vector);
-
--- Full-text search query
-SELECT * FROM products
-WHERE search_vector @@ to_tsquery('english', 'waterproof & boots');
+SELECT * FROM products WHERE price BETWEEN 50 AND 100;
 ```
 
-And for JSONB columns:
+**Query 5**
 
 ```sql
-ALTER TABLE products ADD COLUMN attributes JSONB;
-
-CREATE INDEX idx_products_attributes ON products USING gin (attributes);
-
--- Find products where attributes contain a specific key-value
-SELECT * FROM products WHERE attributes @> '{"material": "leather"}';
-```
-
-**When to use**: Full-text search, array containment queries, JSONB queries.
-
-### 4.4 GiST (Generalized Search Tree, Advanced)
-
-> [!TIP]
-> **Advanced.** Helpful extra. Read this after the fundamentals in this section are solid.
-
-GiST indexes support complex data types that don't fit neatly into B-tree ordering — geometric shapes, ranges, and spatial data.
-
-Imagine TrailShop has physical store locations:
-
-```sql
-CREATE TABLE stores (
-    store_id    SERIAL PRIMARY KEY,
-    store_name  VARCHAR(100),
-    location    POINT
-);
-
-INSERT INTO stores (store_name, location) VALUES
-    ('Helsinki Store', POINT(24.9384, 60.1699)),
-    ('Tampere Store', POINT(23.7610, 61.4978)),
-    ('Turku Store', POINT(22.2687, 60.4518));
-
--- Create a GiST index on the location column
-CREATE INDEX idx_stores_location ON stores USING gist (location);
-
--- Find stores near a given coordinate
-SELECT store_name
-FROM stores
-ORDER BY location <-> POINT(24.0, 60.2)
-LIMIT 3;
-```
-
-GiST also works well with range types:
-
-```sql
-CREATE TABLE promotions (
-    promo_id    SERIAL PRIMARY KEY,
-    promo_name  VARCHAR(100),
-    valid_range DATERANGE
-);
-
-CREATE INDEX idx_promotions_range ON promotions USING gist (valid_range);
-
--- Find promotions active today
-SELECT * FROM promotions
-WHERE valid_range @> CURRENT_DATE;
-```
-
-**When to use**: Spatial/geometric data, range types, nearest-neighbor queries.
-
-### 4.5 BRIN (Block Range Index, Advanced)
-
-> [!TIP]
-> **Advanced.** Helpful extra. Read this after the fundamentals in this section are solid.
-
-BRIN indexes are extremely small and efficient for **large, physically ordered tables** — tables where the values in a column naturally increase with the physical order of the rows. Time-series data and log tables are perfect candidates.
-
-A BRIN index doesn't store every value. Instead, it stores the **minimum and maximum** value for each range of table pages (by default, 128 pages). This makes it tiny but still useful for range queries.
-
-```sql
-CREATE TABLE order_logs (
-    log_id      SERIAL PRIMARY KEY,
-    created_at  TIMESTAMP NOT NULL DEFAULT NOW(),
-    order_id    INTEGER,
-    event       VARCHAR(50)
-);
-
--- BRIN works because rows are inserted chronologically,
--- so created_at naturally correlates with physical order
-CREATE INDEX idx_logs_created ON order_logs USING brin (created_at);
-
--- Find logs from the last 24 hours
-SELECT * FROM order_logs
-WHERE created_at > NOW() - INTERVAL '24 hours';
-```
-
-**When to use**: Very large tables (millions+ rows) where the indexed column correlates with the physical insertion order. Especially timestamps in log/event tables.
-
-### 4.6 SP-GiST (Space-Partitioned Generalized Search Tree, Advanced)
-
-> [!TIP]
-> **Advanced.** Helpful extra. Read this after the fundamentals in this section are solid.
-
-SP-GiST supports partitioned search trees like quadtrees, k-d trees, and radix trees. It's useful for data that has a natural clustering structure that doesn't map well to balanced trees.
-
-```sql
--- SP-GiST can be used for IP address ranges, phone number prefixes, etc.
-CREATE INDEX idx_customers_phone ON customers USING spgist (phone);
-```
-
-**When to use**: Specialized scenarios involving hierarchical or space-partitioned data. Most applications won't need SP-GiST.
-
-### 4.7 Index Type Comparison (Advanced)
-
-> [!TIP]
-> **Advanced.** Helpful extra. Read this after the fundamentals in this section are solid.
-
-| Index Type | Supported Operators | Best Use Case | Size |
-|---|---|---|---|
-| B-tree | `=`, `<`, `>`, `<=`, `>=`, `BETWEEN`, `LIKE 'prefix%'` | General purpose — most queries | Medium |
-| Hash | `=` | Pure equality lookups | Small |
-| GIN | `@>`, `<@`, `@@`, `?`, `?&`, `?\|` | Arrays, JSONB, full-text search | Large |
-| GiST | `<<`, `>>`, `<@`, `@>`, `<->` | Spatial data, ranges, nearest-neighbor | Medium |
-| BRIN | `<`, `<=`, `=`, `>=`, `>` | Large sequential tables (time-series, logs) | Very small |
-| SP-GiST | `<<`, `>>`, `<@`, `@>` | Space-partitioned data (IP ranges, quadtrees) | Medium |
-
----
-
-## 5 — Creating Indexes
-
-> **Mixed.** Sections 5.1–5.4 and 5.6 are fundamentals: basic, unique, multi-column, partial, and covering indexes. Sections 5.5, 5.7, and 5.8 (expression indexes, the full syntax, and `CONCURRENTLY`) are advanced.
-
-### 5.1 Basic Index
-
-The simplest form creates a B-tree index on a single column:
-
-```sql
-CREATE INDEX idx_products_name ON products(name);
-```
-
-Naming convention: `idx_tablename_columnname` makes indexes easy to identify.
-
-### 5.2 Unique Index
-
-A unique index enforces that no two rows can have the same value in the indexed column(s):
-
-```sql
-CREATE UNIQUE INDEX idx_customers_email ON customers(email);
-```
-
-This serves double duty: it speeds up lookups on `email` and prevents duplicate email addresses. Note that `CREATE TABLE ... UNIQUE(email)` automatically creates a unique index behind the scenes.
-
-### 5.3 Multi-Column Indexes
-
-You can index multiple columns together:
-
-```sql
-CREATE INDEX idx_orders_customer_date
-ON orders(customer_id, order_date);
-```
-
-**The leftmost prefix rule**: A multi-column index can be used for queries that filter on the leftmost column(s) of the index, but not for queries that skip the leading column.
-
-```sql
--- ✓ Can use the index (filters on customer_id, the leftmost column)
-SELECT * FROM orders WHERE customer_id = 42;
-
--- ✓ Can use the index (filters on both columns)
-SELECT * FROM orders WHERE customer_id = 42 AND order_date > '2026-01-01';
-
--- ✗ Cannot efficiently use this index (skips customer_id)
-SELECT * FROM orders WHERE order_date > '2026-01-01';
-```
-
-Think of it like a phone book sorted by last name, then first name. You can look up everyone named "Smith" (last name only) or "John Smith" (both), but you can't efficiently find everyone named "John" (first name only) — the phone book isn't sorted that way.
-
-### 5.4 Partial Indexes
-
-A partial index only indexes rows that match a condition. This makes the index smaller and more focused:
-
-```sql
-CREATE INDEX idx_orders_active
-ON orders(order_date)
-WHERE status = 'pending';
-```
-
-This index only contains rows where `status = 'pending'`. Queries that include this condition can use the smaller, faster index:
-
-```sql
--- ✓ Uses the partial index
-SELECT * FROM orders WHERE status = 'pending' AND order_date > '2026-06-01';
-
--- ✗ Cannot use the partial index (different status)
-SELECT * FROM orders WHERE status = 'shipped' AND order_date > '2026-06-01';
-```
-
-Partial indexes are excellent when you frequently query a specific subset of data — active users, pending orders, recent records.
-
-### 5.5 Expression Indexes (Advanced)
-
-> [!TIP]
-> **Advanced.** Helpful extra. Read this after the fundamentals in this section are solid.
-
-An expression index indexes the result of an expression or function rather than a raw column value:
-
-```sql
-CREATE INDEX idx_products_name_lower ON products(LOWER(name));
-```
-
-This enables case-insensitive searches to use the index:
-
-```sql
--- ✓ Uses the expression index
-SELECT * FROM products WHERE LOWER(name) = 'trailmaster x4';
-
--- ✗ Cannot use the expression index (no LOWER function)
-SELECT * FROM products WHERE name = 'trailmaster x4';
-```
-
-The query must use the **exact same expression** as the index definition.
-
-### 5.6 Covering Indexes (INCLUDE)
-
-A covering index includes extra columns that aren't part of the search key but are needed in the query result. This enables **Index Only Scans** — PostgreSQL can answer the query entirely from the index without touching the table at all.
-
-```sql
-CREATE INDEX idx_orders_customer_covering
-ON orders(customer_id)
-INCLUDE (order_date, total_amount);
-```
-
-```sql
--- This can be an Index Only Scan — all needed columns are in the index
-SELECT order_date, total_amount
-FROM orders
-WHERE customer_id = 42;
-```
-
-The `INCLUDE` columns are stored in the leaf nodes of the index but aren't part of the search tree structure. This means they don't affect sort order or search capability — they're just along for the ride.
-
-### 5.7 Full Syntax Reference (Advanced)
-
-> [!TIP]
-> **Advanced.** Helpful extra. Read this after the fundamentals in this section are solid.
-
-```sql
-CREATE [ UNIQUE ] INDEX [ CONCURRENTLY ] [ [ IF NOT EXISTS ] index_name ]
-    ON [ ONLY ] table_name [ USING method ]
-    ( { column_name | ( expression ) } [ COLLATE collation ]
-      [ opclass [ ( opclass_parameter = value [, ... ] ) ] ]
-      [ ASC | DESC ] [ NULLS { FIRST | LAST } ]
-      [, ...] )
-    [ INCLUDE ( column_name [, ...] ) ]
-    [ NULLS [ NOT ] DISTINCT ]
-    [ WITH ( storage_parameter [= value] [, ... ] ) ]
-    [ TABLESPACE tablespace_name ]
-    [ WHERE predicate ];
-```
-
-### 5.8 CONCURRENTLY: Creating Indexes in Production (Advanced)
-
-> [!TIP]
-> **Advanced.** Helpful extra. Read this after the fundamentals in this section are solid.
-
-By default, `CREATE INDEX` locks the table against writes for the duration of index creation. On a large table, this can take minutes — unacceptable in production.
-
-The `CONCURRENTLY` option builds the index without blocking writes:
-
-```sql
-CREATE INDEX CONCURRENTLY idx_products_name ON products(name);
-```
-
-Trade-offs:
-- Takes longer to build (must scan the table twice)
-- Cannot be run inside a transaction
-- If it fails partway through, you get an invalid index that must be dropped
-
-Always use `CONCURRENTLY` when creating indexes on production tables that are actively receiving traffic.
-
----
-
-## 6 — Automatic Indexes
-
-> **Fundamentals.** This whole section is core: primary keys and `UNIQUE` get an index; foreign keys do not.
-
-### 6.1 Primary Keys and UNIQUE Constraints
-
-PostgreSQL **automatically** creates an index when you define a primary key or a `UNIQUE` constraint:
-
-```sql
-CREATE TABLE products (
-    product_id SERIAL PRIMARY KEY,  -- auto-creates unique index
-    name VARCHAR(100) UNIQUE,       -- auto-creates unique index
-    price NUMERIC(10,2)
-);
-```
-
-You can verify this with:
-
-```sql
-\di products
-```
-
-### 6.2 Foreign Keys Do NOT Get Auto-Indexed
-
-This is one of the most common performance mistakes in PostgreSQL. When you create a foreign key constraint, PostgreSQL does **not** automatically create an index on the foreign key column.
-
-```sql
-CREATE TABLE order_items (
-    item_id     SERIAL PRIMARY KEY,
-    order_id    INTEGER REFERENCES orders(order_id),   -- FK, no auto-index
-    product_id  INTEGER REFERENCES products(product_id), -- FK, no auto-index
-    quantity    INTEGER,
-    unit_price  NUMERIC(10,2)
-);
-```
-
-Why does this matter? Consider a typical TrailShop query:
-
-```sql
-SELECT o.order_id, p.name, oi.quantity, oi.unit_price
-FROM orders o
-JOIN order_items oi ON o.order_id = oi.order_id
-JOIN products p ON oi.product_id = p.product_id
-WHERE o.customer_id = 42;
-```
-
-Without an index on `order_items.order_id`, PostgreSQL must do a **sequential scan** of the entire `order_items` table for every order. With millions of order items, this is devastating.
-
-The fix is simple but critical — always index your foreign key columns:
-
-```sql
-CREATE INDEX idx_order_items_order_id ON order_items(order_id);
-CREATE INDEX idx_order_items_product_id ON order_items(product_id);
-CREATE INDEX idx_orders_customer_id ON orders(customer_id);
-```
-
-As Watt & Eng emphasize in *Database Design — 2nd Edition*: foreign key columns are frequently used in JOIN conditions and should almost always be indexed.
-
----
-
-## 7 — EXPLAIN and EXPLAIN ANALYZE
-
-> **Mixed.** Sections 7.1–7.3 and 7.6 are fundamentals: `EXPLAIN`, `EXPLAIN ANALYZE`, how to read the numbers, and the warning that `ANALYZE` runs the statement. Sections 7.4–7.5 (`BUFFERS` and JSON / YAML output) are advanced.
-
-Understanding *how* PostgreSQL executes your queries is essential for optimization. The `EXPLAIN` command shows you the **execution plan** — the strategy PostgreSQL chose.
-
-For full documentation, see: [https://www.postgresql.org/docs/current/using-explain.html](https://www.postgresql.org/docs/current/using-explain.html)
-
-### 7.1 EXPLAIN: The Estimated Plan
-
-`EXPLAIN` shows what PostgreSQL *plans* to do without actually running the query:
-
-```sql
-EXPLAIN SELECT * FROM products WHERE name = 'TrailMaster X4';
-```
-
-Output (without an index):
-
-```
-Seq Scan on products  (cost=0.00..25.00 rows=1 width=64)
-  Filter: ((name)::text = 'TrailMaster X4'::text)
-```
-
-### 7.2 EXPLAIN ANALYZE: The Actual Execution
-
-`EXPLAIN ANALYZE` actually **runs** the query and shows both the plan and real execution statistics:
-
-```sql
-EXPLAIN ANALYZE SELECT * FROM products WHERE name = 'TrailMaster X4';
-```
-
-Output:
-
-```
-Seq Scan on products  (cost=0.00..25.00 rows=1 width=64)
-                      (actual time=0.215..0.452 rows=1 loops=1)
-  Filter: ((name)::text = 'TrailMaster X4'::text)
-  Rows Removed by Filter: 999
-Planning Time: 0.085 ms
-Execution Time: 0.478 ms
-```
-
-### 7.3 Reading the Output
-
-Each line in the output represents a **plan node**. Here's what the numbers mean:
-
-| Field | Meaning |
-|---|---|
-| `cost=0.00..25.00` | Estimated cost: startup cost (0.00) to total cost (25.00). These are arbitrary units, not milliseconds. |
-| `rows=1` | Estimated number of rows this node will output |
-| `width=64` | Estimated average width of each row in bytes |
-| `actual time=0.215..0.452` | Real time in milliseconds: time to first row .. time to last row |
-| `rows=1` (actual) | Actual number of rows returned |
-| `loops=1` | How many times this node was executed |
-| `Rows Removed by Filter: 999` | Rows examined but didn't match the filter |
-
-### 7.4 BUFFERS: Seeing Disk I/O (Advanced)
-
-> [!TIP]
-> **Advanced.** Helpful extra. Read this after the fundamentals in this section are solid.
-
-Adding `BUFFERS` shows how many pages were read:
-
-```sql
-EXPLAIN (ANALYZE, BUFFERS) SELECT * FROM products WHERE name = 'TrailMaster X4';
-```
-
-```
-Seq Scan on products  (cost=0.00..25.00 rows=1 width=64)
-                      (actual time=0.215..0.452 rows=1 loops=1)
-  Filter: ((name)::text = 'TrailMaster X4'::text)
-  Rows Removed by Filter: 999
-  Buffers: shared hit=15
-Planning Time: 0.085 ms
-Execution Time: 0.478 ms
-```
-
-- `shared hit=15` — 15 pages read from the buffer cache (memory)
-- `shared read=X` would mean pages read from disk (slower)
-
-### 7.5 Format Options (Advanced)
-
-> [!TIP]
-> **Advanced.** Helpful extra. Read this after the fundamentals in this section are solid.
-
-PostgreSQL can output plans in different formats:
-
-```sql
-EXPLAIN (FORMAT JSON) SELECT * FROM products WHERE price > 100;
-EXPLAIN (FORMAT YAML) SELECT * FROM products WHERE price > 100;
-EXPLAIN (FORMAT TEXT) SELECT * FROM products WHERE price > 100;  -- default
-```
-
-JSON and YAML formats are useful for programmatic analysis and tools like pgMustard.
-
-### 7.6 Warning: ANALYZE with DML Statements
-
-`EXPLAIN ANALYZE` actually **executes** the query. For `SELECT` this is harmless, but for `INSERT`, `UPDATE`, or `DELETE` it will modify data. Always wrap DML analysis in a transaction:
-
-```sql
-BEGIN;
-EXPLAIN ANALYZE DELETE FROM order_items WHERE quantity = 0;
-ROLLBACK;
-```
-
-The `ROLLBACK` undoes the deletion, but you still get the execution plan with real statistics.
-
----
-
-## 8 — Scan Types
-
-> **Mixed.** Sections 8.1–8.3 and 8.5 are fundamentals: Seq Scan, Index Scan, Index Only Scan, and the comparison. Section 8.4 (bitmap scans) is advanced.
-
-When PostgreSQL reads data from a table, it uses one of several scanning strategies. The query planner chooses the strategy based on table size, available indexes, and the estimated selectivity of the query.
-
-### 8.1 Sequential Scan (Seq Scan)
-
-The simplest approach: read every row in the table from start to finish.
-
-```sql
-EXPLAIN SELECT * FROM products WHERE description LIKE '%waterproof%';
-```
-
-```
-Seq Scan on products  (cost=0.00..30.00 rows=50 width=128)
-  Filter: (description ~~ '%waterproof%')
-```
-
-**When PostgreSQL chooses Seq Scan**:
-- No suitable index exists
-- The query matches a large percentage of rows (index would be slower due to random I/O)
-- The table is very small (a few pages)
-
-### 8.2 Index Scan
-
-PostgreSQL traverses the index to find matching entries, then fetches each matching row from the table (the "heap").
-
-```sql
-CREATE INDEX idx_products_name ON products(name);
-
-EXPLAIN SELECT * FROM products WHERE name = 'TrailMaster X4';
-```
-
-```
-Index Scan using idx_products_name on products  (cost=0.28..8.29 rows=1 width=64)
-  Index Cond: ((name)::text = 'TrailMaster X4'::text)
-```
-
-The index scan does two things per matching row: (1) look up the pointer in the index, (2) fetch the actual row from the table. Step 2 involves **random I/O**, which is why PostgreSQL sometimes prefers a Seq Scan for queries that match many rows.
-
-### 8.3 Index Only Scan
-
-If the index contains **all columns** needed by the query, PostgreSQL can skip the table entirely:
-
-```sql
-CREATE INDEX idx_products_name_price ON products(name) INCLUDE (price);
-
-EXPLAIN SELECT name, price FROM products WHERE name = 'TrailMaster X4';
-```
-
-```
-Index Only Scan using idx_products_name_price on products  (cost=0.28..4.29 rows=1 width=36)
-  Index Cond: (name = 'TrailMaster X4'::text)
-```
-
-Index Only Scans are the fastest scan type, but they require a check against the **visibility map** to ensure the data is up-to-date. Regular `VACUUM` keeps the visibility map current.
-
-### 8.4 Bitmap Index Scan + Bitmap Heap Scan (Advanced)
-
-> [!TIP]
-> **Advanced.** Helpful extra. Read this after the fundamentals in this section are solid.
-
-This is a two-step process that combines the benefits of index lookup with the efficiency of sequential reading:
-
-1. **Bitmap Index Scan**: Reads the index and builds a bitmap (a map of which table pages contain matching rows)
-2. **Bitmap Heap Scan**: Reads those pages sequentially from the table
-
-```sql
-EXPLAIN SELECT * FROM products WHERE price BETWEEN 100 AND 200;
-```
-
-```
-Bitmap Heap Scan on products  (cost=4.30..15.20 rows=150 width=64)
-  Recheck Cond: ((price >= 100) AND (price <= 200))
-  ->  Bitmap Index Scan on idx_products_price  (cost=0.00..4.26 rows=150 width=0)
-        Index Cond: ((price >= 100) AND (price <= 200))
-```
-
-**When PostgreSQL chooses bitmap scans**: Moderate selectivity — too many matching rows for individual index lookups to be efficient, but few enough that scanning the entire table would be wasteful. Also used when combining multiple indexes with `AND`/`OR`.
-
-### 8.5 Scan Type Comparison
-
-| Scan Type | How It Works | When Chosen |
-|---|---|---|
-| Seq Scan | Reads every row in physical order | No index, low selectivity, tiny tables |
-| Index Scan | Looks up index, fetches rows one by one | High selectivity, few matching rows |
-| Index Only Scan | Reads only from the index | All needed columns in index, high selectivity |
-| Bitmap Index Scan → Bitmap Heap Scan | Builds page bitmap from index, reads pages sequentially | Moderate selectivity, combining multiple conditions |
-
----
-
-## 9 — Join Algorithms (Advanced)
-
-> **Advanced.** This whole section is extra: Nested Loop, Hash Join, and Merge Join.
-
-> [!TIP]
-> **Advanced.** Helpful extra. Read this after the fundamentals are solid.
-
-When a query joins two or more tables, PostgreSQL must decide *how* to combine them. The choice of join algorithm has a significant impact on performance.
-
-### 9.1 Nested Loop Join (Advanced)
-
-The simplest algorithm. For each row in the outer table, scan the inner table for matching rows.
-
-```sql
-EXPLAIN ANALYZE
-SELECT o.order_id, oi.product_id, oi.quantity
-FROM orders o
-JOIN order_items oi ON o.order_id = oi.order_id
-WHERE o.customer_id = 42;
-```
-
-```
-Nested Loop  (cost=0.56..24.80 rows=5 width=16)
-             (actual time=0.030..0.045 rows=5 loops=1)
-  ->  Index Scan using idx_orders_customer_id on orders o
-        (cost=0.28..8.29 rows=1 width=4)
-        Index Cond: (customer_id = 42)
-  ->  Index Scan using idx_order_items_order_id on order_items oi
-        (cost=0.28..16.40 rows=5 width=16)
-        Index Cond: (order_id = o.order_id)
-```
-
-**Complexity**: O(n × m) in the worst case, but with an index on the inner table, it becomes O(n × log m).
-
-**When chosen**: Small outer result set with an indexed inner table. Very efficient for highly selective queries.
-
-### 9.2 Hash Join (Advanced)
-
-PostgreSQL builds a **hash table** from the smaller input, then probes it with each row from the larger input.
-
-```sql
-EXPLAIN ANALYZE
-SELECT c.name, COUNT(o.order_id)
-FROM customers c
-JOIN orders o ON c.customer_id = o.customer_id
-GROUP BY c.name;
-```
-
-```
-HashAggregate  (cost=85.00..90.00 rows=500 width=40)
-  ->  Hash Join  (cost=15.00..80.00 rows=2000 width=36)
-        Hash Cond: (o.customer_id = c.customer_id)
-        ->  Seq Scan on orders o  (cost=0.00..55.00 rows=2000 width=8)
-        ->  Hash  (cost=10.00..10.00 rows=500 width=36)
-              ->  Seq Scan on customers c  (cost=0.00..10.00 rows=500 width=36)
-```
-
-**How it works**:
-1. Scan the smaller table (customers) and build a hash table keyed by `customer_id`
-2. Scan the larger table (orders) and for each row, look up `customer_id` in the hash table
-
-**Complexity**: O(n + m) — much better than nested loop for large, unindexed joins.
-
-**When chosen**: Equality joins on unindexed columns, or when both tables are large.
-
-### 9.3 Merge Join (Advanced)
-
-Both inputs are sorted on the join key, then merged together in a single pass.
-
-```sql
-EXPLAIN ANALYZE
-SELECT p.name, c.category_name
+SELECT p.name, c.name AS category
 FROM products p
 JOIN product_categories pc ON pc.product_id = p.product_id
 JOIN categories c ON c.category_id = pc.category_id
-ORDER BY pc.category_id;
+WHERE pc.category_id = 2;
 ```
 
-```
-Merge Join  (cost=50.00..70.00 rows=1000 width=64)
-  Merge Cond: (p.category_id = c.category_id)
-  ->  Sort  (cost=40.00..42.50 rows=1000 width=40)
-        Sort Key: p.category_id
-        ->  Seq Scan on products p  (cost=0.00..25.00 rows=1000 width=40)
-  ->  Sort  (cost=5.00..5.25 rows=10 width=24)
-        Sort Key: c.category_id
-        ->  Seq Scan on categories c  (cost=0.00..1.10 rows=10 width=24)
-```
-
-**How it works**: Like merging two sorted decks of cards — advance through both inputs simultaneously, matching on the join key.
-
-**Complexity**: O(n log n + m log m) for the sorts, then O(n + m) for the merge.
-
-**When chosen**: Both inputs are already sorted (or can be sorted cheaply), large datasets, range joins.
-
-### 9.4 Join Algorithm Comparison (Advanced)
-
-| Algorithm | Complexity | Best For | Requires |
-|---|---|---|---|
-| Nested Loop | O(n × m), O(n × log m) with index | Small outer + indexed inner | Index on inner table (ideally) |
-| Hash Join | O(n + m) | Large unindexed equality joins | Enough memory for hash table |
-| Merge Join | O(n log n + m log m) | Large pre-sorted datasets | Sortable join keys |
-
----
-
-## 10 — Before/After Examples
-
-> **Mixed.** Sections 10.1–10.2 are fundamentals: a name lookup and an index on a foreign key. Section 10.3 (the join algorithm change) is advanced.
-
-Let's see the dramatic impact of indexes on real TrailShop queries.
-
-### 10.1 Query 1: Product Lookup by Name
-
-**Before** (no index on `name`):
+**Query 6**
 
 ```sql
-EXPLAIN ANALYZE SELECT * FROM products WHERE name = 'TrailMaster X4';
+SELECT * FROM payments WHERE order_id = 88;
 ```
 
-```
-Seq Scan on products  (cost=0.00..2500.00 rows=1 width=128)
-                      (actual time=12.450..45.230 rows=1 loops=1)
-  Filter: ((name)::text = 'TrailMaster X4'::text)
-  Rows Removed by Filter: 199999
-Planning Time: 0.120 ms
-Execution Time: 45.280 ms
-```
-
-**After** (with index):
+**Query 7**
 
 ```sql
-CREATE INDEX idx_products_name ON products(name);
-
-EXPLAIN ANALYZE SELECT * FROM products WHERE name = 'TrailMaster X4';
+SELECT * FROM orders WHERE status = 'shipped' AND order_date > '2026-06-01';
 ```
 
-```
-Index Scan using idx_products_name on products  (cost=0.42..8.44 rows=1 width=128)
-                                                (actual time=0.025..0.027 rows=1 loops=1)
-  Index Cond: ((name)::text = 'TrailMaster X4'::text)
-Planning Time: 0.150 ms
-Execution Time: 0.045 ms
-```
-
-**Result**: 45 ms → 0.045 ms — a **1,000× improvement**.
-
-### 10.2 Query 2: Order Items by Foreign Key
-
-**Before** (no index on `order_items.order_id`):
+**Query 8**
 
 ```sql
-EXPLAIN ANALYZE
-SELECT * FROM order_items WHERE order_id = 12345;
+SELECT customer_id, COUNT(*) FROM orders GROUP BY customer_id HAVING COUNT(*) > 5;
 ```
 
-```
-Seq Scan on order_items  (cost=0.00..45000.00 rows=3 width=32)
-                         (actual time=89.100..312.500 rows=3 loops=1)
-  Filter: (order_id = 12345)
-  Rows Removed by Filter: 2999997
-Planning Time: 0.080 ms
-Execution Time: 312.550 ms
-```
-
-**After**:
+**Query 9**
 
 ```sql
-CREATE INDEX idx_order_items_order_id ON order_items(order_id);
-
-EXPLAIN ANALYZE
-SELECT * FROM order_items WHERE order_id = 12345;
-```
-
-```
-Index Scan using idx_order_items_order_id on order_items  (cost=0.43..12.50 rows=3 width=32)
-                                                          (actual time=0.018..0.025 rows=3 loops=1)
-  Index Cond: (order_id = 12345)
-Planning Time: 0.120 ms
-Execution Time: 0.040 ms
-```
-
-**Result**: 312 ms → 0.04 ms — a **7,800× improvement**.
-
-### 10.3 Query 3: Join Query with Algorithm Change (Advanced)
-
-> [!TIP]
-> **Advanced.** Helpful extra. Read this after the fundamentals in this section are solid.
-
-**Before** (no indexes on FK columns):
-
-```sql
-EXPLAIN ANALYZE
-SELECT c.name, p.name AS product, oi.quantity
-FROM customers c
-JOIN orders o ON c.customer_id = o.customer_id
-JOIN order_items oi ON o.order_id = oi.order_id
-JOIN products p ON oi.product_id = p.product_id
-WHERE c.email = 'maria@example.com';
-```
-
-```
-Hash Join  (cost=55000.00..95000.00 rows=5 width=64)
-           (actual time=850.200..1520.400 rows=5 loops=1)
-  Hash Cond: (oi.product_id = p.product_id)
-  ->  Hash Join  (cost=45000.00..85000.00 rows=5 width=40)
-        Hash Cond: (oi.order_id = o.order_id)
-        ->  Seq Scan on order_items oi  (cost=0.00..45000.00 rows=3000000 width=16)
-        ->  Hash  (...)
-              ->  Hash Join  (cost=20.00..35.00 rows=3 width=24)
-                    ->  Seq Scan on orders o  (...)
-                    ->  Hash  (...)
-                          ->  Seq Scan on customers c  (...)
-                                Filter: (email = 'maria@example.com')
-  ->  Hash  (...)
-        ->  Seq Scan on products p  (cost=0.00..2500.00 rows=200000 width=24)
-Planning Time: 1.200 ms
-Execution Time: 1521.000 ms
-```
-
-**After** (with indexes on FK columns and email):
-
-```sql
-CREATE INDEX idx_orders_customer_id ON orders(customer_id);
-CREATE INDEX idx_order_items_order_id ON order_items(order_id);
-CREATE INDEX idx_order_items_product_id ON order_items(product_id);
-CREATE INDEX idx_customers_email ON customers(email);
-
-EXPLAIN ANALYZE
-SELECT c.name, p.name AS product, oi.quantity
-FROM customers c
-JOIN orders o ON c.customer_id = o.customer_id
-JOIN order_items oi ON o.order_id = oi.order_id
-JOIN products p ON oi.product_id = p.product_id
-WHERE c.email = 'maria@example.com';
-```
-
-```
-Nested Loop  (cost=1.14..45.80 rows=5 width=64)
-             (actual time=0.050..0.120 rows=5 loops=1)
-  ->  Nested Loop  (cost=0.85..37.00 rows=5 width=44)
-        ->  Nested Loop  (cost=0.57..28.50 rows=3 width=12)
-              ->  Index Scan using idx_customers_email on customers c
-                    (cost=0.28..8.30 rows=1 width=36)
-                    Index Cond: (email = 'maria@example.com')
-              ->  Index Scan using idx_orders_customer_id on orders o
-                    (cost=0.29..20.10 rows=3 width=8)
-                    Index Cond: (customer_id = c.customer_id)
-        ->  Index Scan using idx_order_items_order_id on order_items oi
-              (cost=0.28..2.80 rows=2 width=16)
-              Index Cond: (order_id = o.order_id)
-  ->  Index Scan using products_pkey on products p
-        (cost=0.29..1.75 rows=1 width=24)
-        Index Cond: (product_id = oi.product_id)
-Planning Time: 0.500 ms
-Execution Time: 0.150 ms
-```
-
-**Result**: 1,521 ms → 0.15 ms — a **10,000× improvement**. The planner switched from Hash Joins with Seq Scans to Nested Loops with Index Scans because the indexes made targeted lookups far cheaper.
-
----
-
-## 11 — When to Create Indexes
-
-> **Fundamentals.** This whole section is core: when an index is worth creating.
-
-### 11.1 Decision Criteria
-
-Not every column needs an index. Focus on columns that appear in:
-
-- **WHERE** clauses — especially with equality or range conditions
-- **JOIN** conditions — particularly foreign key columns
-- **ORDER BY** clauses — avoids expensive sorting
-- **GROUP BY** clauses — can speed up aggregation
-
-### 11.2 High Selectivity
-
-**Selectivity** measures what fraction of rows a query condition matches. High selectivity (few matching rows) benefits most from indexes.
-
-| Column | Example Values | Selectivity | Index Useful? |
-|---|---|---|---|
-| `email` | Unique per customer | Very high | Yes |
-| `product_id` (FK) | Many distinct products | High | Yes |
-| `order_date` | Many distinct dates | High | Yes |
-| `status` | 'pending', 'shipped', 'delivered' | Low | Usually no |
-| `is_active` | TRUE, FALSE | Very low | No |
-
-### 11.3 Practical Guidelines for TrailShop
-
-```sql
--- Always index foreign keys
-CREATE INDEX idx_orders_customer_id ON orders(customer_id);
-CREATE INDEX idx_order_items_order_id ON order_items(order_id);
-CREATE INDEX idx_order_items_product_id ON order_items(product_id);
-CREATE INDEX idx_product_categories_category_id ON product_categories(category_id);
-CREATE INDEX idx_payments_order_id ON payments(order_id);
-
--- Index columns used in WHERE clauses
-CREATE INDEX idx_customers_email ON customers(email);
-CREATE INDEX idx_orders_order_date ON orders(order_date);
-
--- Multi-column index for common query pattern
-CREATE INDEX idx_orders_status_date ON orders(status, order_date);
-```
-
----
-
-## 12 — When NOT to Create Indexes
-
-> **Fundamentals.** This whole section is core: small tables, low selectivity, write-heavy tables, and over-indexing.
-
-Indexes are not free. Every index comes with costs, and over-indexing can be worse than under-indexing.
-
-### 12.1 Small Tables
-
-If a table has only a few hundred rows, a sequential scan is virtually instantaneous. The overhead of maintaining an index isn't worth the negligible lookup improvement.
-
-```sql
--- The categories table has 10 rows — no index needed beyond the PK
-SELECT * FROM categories WHERE category_name = 'Footwear';
--- Seq Scan is fine here: 10 rows, microseconds
-```
-
-### 12.2 Low Selectivity Columns
-
-Indexing a column with very few distinct values (like a boolean `is_active` or a `status` with three possible values) is usually pointless. If 40% of rows match the condition, PostgreSQL will likely choose a Seq Scan anyway because fetching 40% of rows via random I/O (index scan) is slower than a sequential read.
-
-```sql
--- Poor index candidate: low selectivity
-CREATE INDEX idx_orders_status ON orders(status);  -- only 3-4 distinct values
-
--- Better approach: partial index if you query one specific value
-CREATE INDEX idx_orders_pending ON orders(order_date) WHERE status = 'pending';
-```
-
-### 12.3 Write-Heavy Tables
-
-Every `INSERT`, `UPDATE`, and `DELETE` must also update **every index** on the table. For write-heavy tables (like logging tables receiving thousands of inserts per second), excessive indexes can severely degrade write performance.
-
-| Operation | Without Indexes | With 5 Indexes |
-|---|---|---|
-| INSERT 1 row | 1 table write | 1 table write + 5 index writes |
-| UPDATE 1 column | 1 table write | 1 table write + affected index writes |
-| DELETE 1 row | 1 table write | 1 table write + 5 index writes |
-
-### 12.4 Cost-Benefit: Read/Write Ratio
-
-Consider the read/write ratio of the table:
-
-- **Read-heavy** (products catalog, reference data): More indexes are beneficial
-- **Write-heavy** (event logs, analytics events): Minimize indexes
-- **Balanced** (orders, user sessions): Index selectively based on query patterns
-
-### 12.5 Over-Indexing Dangers
-
-- **Wasted disk space**: Each index takes storage. A table with 10 indexes might have more total index storage than the table itself.
-- **Slower writes**: Every write operation pays the index maintenance tax.
-- **Planner confusion**: Too many indexes can cause the query planner to spend extra time evaluating options, and it might occasionally pick a suboptimal index.
-- **Maintenance burden**: Unused indexes still consume resources during `VACUUM` and other maintenance operations.
-
----
-
-## 13 — Index Maintenance (Advanced)
-
-> **Advanced.** This whole section is extra: `VACUUM`, `REINDEX`, and the monitoring queries.
-
-> [!TIP]
-> **Advanced.** Helpful extra. Read this after the fundamentals are solid.
-
-Indexes, like the tables they serve, require ongoing maintenance to stay healthy and performant.
-
-### 13.1 VACUUM and Dead Tuples (Advanced)
-
-PostgreSQL uses MVCC (Multi-Version Concurrency Control) — when you update or delete a row, the old version isn't immediately removed. It becomes a **dead tuple**. Over time, dead tuples accumulate and cause **bloat** — wasted space in both tables and indexes.
-
-`VACUUM` reclaims space from dead tuples:
-
-```sql
--- Manual vacuum on a specific table
-VACUUM products;
-
--- Verbose output shows what was cleaned
-VACUUM VERBOSE products;
-
--- VACUUM FULL rewrites the entire table (locks table, use sparingly)
-VACUUM FULL products;
-```
-
-PostgreSQL runs **autovacuum** in the background, which automatically vacuums tables when dead tuples accumulate beyond a threshold. In most cases, autovacuum handles this for you — but monitoring is still important.
-
-### 13.2 REINDEX: Rebuilding Bloated Indexes (Advanced)
-
-Even with regular `VACUUM`, B-tree indexes can become bloated over time — pages that were once full may become sparsely populated. `REINDEX` rebuilds an index from scratch:
-
-```sql
--- Rebuild a specific index
-REINDEX INDEX idx_products_name;
-
--- Rebuild all indexes on a table
-REINDEX TABLE products;
-
--- Non-blocking rebuild in production
-REINDEX INDEX CONCURRENTLY idx_products_name;
-```
-
-### 13.3 Monitoring Index Usage (Advanced)
-
-PostgreSQL tracks index usage statistics. Use these to find unused indexes that can be dropped:
-
-```sql
--- See how often each index is used
-SELECT
-    schemaname,
-    relname AS table_name,
-    indexrelname AS index_name,
-    idx_scan AS times_used,
-    pg_size_pretty(pg_relation_size(indexrelid)) AS index_size
-FROM pg_stat_user_indexes
-ORDER BY idx_scan ASC;
-```
-
-An index with `idx_scan = 0` over a long period is a candidate for removal — it's consuming space and slowing writes without benefiting any query.
-
-### 13.4 Sequential Scans vs Index Scans (Advanced)
-
-Monitor whether tables are being scanned sequentially when they shouldn't be:
-
-```sql
-SELECT
-    relname AS table_name,
-    seq_scan,
-    idx_scan,
-    CASE WHEN seq_scan + idx_scan > 0
-         THEN ROUND(100.0 * idx_scan / (seq_scan + idx_scan), 1)
-         ELSE 0
-    END AS index_scan_pct,
-    n_live_tup AS row_count
-FROM pg_stat_user_tables
-WHERE n_live_tup > 10000
-ORDER BY seq_scan DESC;
-```
-
-A large table with a high `seq_scan` count and low `idx_scan` count may be missing an index.
-
-### 13.5 Index Size Monitoring (Advanced)
-
-Track how much space your indexes consume:
-
-```sql
-SELECT
-    tablename,
-    indexname,
-    pg_size_pretty(pg_relation_size(indexname::regclass)) AS index_size
-FROM pg_indexes
-WHERE schemaname = 'public'
-ORDER BY pg_relation_size(indexname::regclass) DESC;
-```
-
----
-
-## 14 — Query Optimization Tips
-
-> **Mixed.** Sections 14.1 and 14.3 are fundamentals: avoid `SELECT *`, and do not wrap an indexed column in a function. Sections 14.2, 14.4, 14.5, and 14.6 are advanced.
-
-Indexes are the most powerful optimization tool, but they're not the only one. Here are additional techniques for writing faster queries.
-
-### 14.1 Avoid SELECT *
-
-Fetching all columns forces PostgreSQL to read the full row, even if you only need two columns. This wastes I/O and prevents Index Only Scans.
-
-```sql
--- Slow: fetches all columns
-SELECT * FROM products WHERE price > 100;
-
--- Fast: fetches only what you need, may enable Index Only Scan
-SELECT name, price FROM products WHERE price > 100;
-```
-
-### 14.2 EXISTS vs IN vs JOIN (Advanced)
-
-> [!TIP]
-> **Advanced.** Helpful extra. Read this after the fundamentals in this section are solid.
-
-For existence checks, `EXISTS` is usually the best choice because it can stop searching as soon as it finds one match:
-
-```sql
--- Good: EXISTS stops at the first match
-SELECT c.name
-FROM customers c
-WHERE EXISTS (
-    SELECT 1 FROM orders o WHERE o.customer_id = c.customer_id
-);
-
--- Often equivalent, but can be slower with large subquery results
-SELECT c.name
-FROM customers c
-WHERE c.customer_id IN (
-    SELECT customer_id FROM orders
-);
-
--- JOIN may return duplicates if a customer has multiple orders
-SELECT DISTINCT c.name
-FROM customers c
-JOIN orders o ON c.customer_id = o.customer_id;
-```
-
-### 14.3 Don't Wrap Indexed Columns in Functions
-
-Applying a function to an indexed column in a `WHERE` clause prevents PostgreSQL from using the index:
-
-```sql
--- ✗ Cannot use index on order_date (function applied to column)
-SELECT * FROM orders WHERE EXTRACT(YEAR FROM order_date) = 2026;
-
--- ✓ Can use index on order_date (range condition on raw column)
-SELECT * FROM orders
-WHERE order_date >= '2026-01-01' AND order_date < '2027-01-01';
-```
-
-If you must use a function, create an expression index (see Section 5.5).
-
-### 14.4 LIMIT with ORDER BY (Advanced)
-
-> [!TIP]
-> **Advanced.** Helpful extra. Read this after the fundamentals in this section are solid.
-
-When you need only the top N results, `LIMIT` combined with an appropriate index avoids sorting the entire result set:
-
-```sql
--- With an index on order_date, PostgreSQL reads only 10 index entries
-SELECT * FROM orders
-ORDER BY order_date DESC
-LIMIT 10;
-```
-
-### 14.5 Materialized Views (Advanced)
-
-> [!TIP]
-> **Advanced.** Helpful extra. Read this after the fundamentals in this section are solid.
-
-For expensive queries that are run frequently but don't need real-time data, materialized views store the precomputed result:
-
-```sql
-CREATE MATERIALIZED VIEW mv_sales_summary AS
-SELECT
-    p.name AS product_name,
-    c.category_name,
-    SUM(oi.quantity) AS total_sold,
-    SUM(oi.quantity * oi.unit_price) AS total_revenue
+SELECT oi.quantity, p.name
 FROM order_items oi
-JOIN products p ON oi.product_id = p.product_id
-JOIN product_categories pc ON pc.product_id = p.product_id
-JOIN categories c ON c.category_id = pc.category_id
-GROUP BY p.name, c.category_name;
-
--- Query the materialized view (fast — reads precomputed data)
-SELECT * FROM mv_sales_summary ORDER BY total_revenue DESC LIMIT 10;
-
--- Refresh when you need updated data
-REFRESH MATERIALIZED VIEW mv_sales_summary;
+JOIN products p ON p.id = oi.product_id
+WHERE oi.order_id = 100;
 ```
 
-### 14.6 The ANALYZE Command (Advanced)
-
-> [!TIP]
-> **Advanced.** Helpful extra. Read this after the fundamentals in this section are solid.
-
-PostgreSQL maintains **statistics** about the data in each column — the number of distinct values, most common values, histogram of value distribution. The query planner uses these statistics to estimate costs and choose execution plans.
-
-`ANALYZE` updates these statistics:
+**Query 10**
 
 ```sql
--- Update statistics for a specific table
-ANALYZE products;
-
--- Update statistics for all tables
-ANALYZE;
+SELECT * FROM products WHERE name LIKE 'Trail%';
 ```
 
-PostgreSQL's autovacuum process runs `ANALYZE` automatically, but after bulk data loads or major changes, running it manually ensures the planner has accurate information.
+For each query, fill in:
+
+| #   | Recommended Index | Why It Helps | Expected Scan Type |
+| --- | ----------------- | ------------ | ------------------ |
+| 1 | `CREATE UNIQUE INDEX idx_customers_email ON customers (email);` | Finds a customer quickly by email. | Index Scan |
+| 2 | `CREATE INDEX idx_orders_customer_order_date ON orders (customer_id, order_date DESC);` | Filters by customer and keeps the results in date order. | Index Scan |
+| 3 | `CREATE INDEX idx_order_items_product_id ON order_items (product_id);` | Helps access order items by product. | Index Scan or Seq Scan |
+| 4 | `CREATE INDEX idx_products_price ON products (price);` | Helps with the price range search. | Index Scan or Bitmap Scan |
+| 5 | `CREATE INDEX idx_product_categories_category_id_product_id ON product_categories (category_id, product_id);` | Finds products in a category and provides product IDs for the join. | Index Scan |
+| 6 | `CREATE INDEX idx_payments_order_id ON payments (order_id);` | Finds payments for one order quickly. | Index Scan |
+| 7 | `CREATE INDEX idx_orders_status_order_date ON orders (status, order_date);` | Helps filter by status and then by date. | Index Scan or Bitmap Scan |
+| 8 | `CREATE INDEX idx_orders_customer_id ON orders (customer_id);` | Helps access orders grouped by customer, although PostgreSQL may still use a sequential scan for aggregation. | Index Scan or Seq Scan |
+| 9 | `CREATE INDEX idx_order_items_order_id ON order_items (order_id);` | Quickly finds the items belonging to order 100. | Index Scan |
+| 10 | `CREATE INDEX idx_products_name ON products (name);` | Can help with a prefix search such as `LIKE 'Trail%'`. | Index Scan |
 
 ---
 
-## Key Terms
+## 5. Performance Comparison Exercise
 
-> **Mixed.** The Level column marks each term. Hash, GIN, GiST, BRIN, bitmap scans, expression indexes, the three join algorithms, and the maintenance terms are advanced. The other terms are fundamentals.
+> [!TIP]
+> **Recommended practice.** Do this section. It is not required to finish the TrailShop project. It prepares you for the exams.
 
-| Term | Level | Definition |
-|---|---|---|
-| **Sequential Scan (Seq Scan)** | Fundamental | A scan that reads every row in a table from beginning to end |
-| **Index** | Fundamental | A separate data structure that maps column values to row locations for fast lookup |
-| **B-tree** | Fundamental | A balanced tree data structure used as the default index type; provides O(log n) lookup |
-| **Hash Index** | Advanced | An index using a hash function; supports only equality comparisons |
-| **GIN (Generalized Inverted Index)** | Advanced | An index type for multi-element values: arrays, JSONB, full-text search |
-| **GiST (Generalized Search Tree)** | Advanced | An index type for complex data: spatial, range, nearest-neighbor queries |
-| **BRIN (Block Range Index)** | Advanced | A compact index storing min/max per block range; ideal for large sequential tables |
-| **Index Scan** | Fundamental | A scan that traverses an index then fetches matching rows from the table |
-| **Index Only Scan** | Fundamental | A scan answered entirely from the index without accessing the table |
-| **Bitmap Index Scan** | Advanced | A scan that builds a bitmap of matching pages from the index, then reads those pages |
-| **Execution Plan** | Fundamental | The strategy PostgreSQL chooses to execute a query, viewable with EXPLAIN |
-| **Cost Model** | Fundamental | The system of arbitrary cost units PostgreSQL uses to estimate and compare plan efficiency |
-| **Selectivity** | Fundamental | The fraction of rows a condition matches; high selectivity = few matching rows |
-| **Covering Index** | Fundamental | An index that includes all columns needed by a query, enabling Index Only Scans |
-| **Partial Index** | Fundamental | An index that only includes rows matching a WHERE condition |
-| **Expression Index** | Advanced | An index built on the result of a function or expression rather than a raw column |
-| **Nested Loop Join** | Advanced | A join algorithm that scans the inner table for each row of the outer table |
-| **Hash Join** | Advanced | A join algorithm that builds a hash table from one input and probes it with the other |
-| **Merge Join** | Advanced | A join algorithm that merges two sorted inputs |
-| **VACUUM** | Advanced | A maintenance operation that reclaims space from dead tuples |
-| **Bloat** | Advanced | Wasted space in tables and indexes caused by accumulated dead tuples |
-| **Dead Tuple** | Advanced | An obsolete row version left behind by UPDATE or DELETE under MVCC |
-| **Visibility Map** | Fundamental | A structure tracking which table pages contain only visible (up-to-date) tuples |
-| **Autovacuum** | Advanced | A background process that automatically runs VACUUM and ANALYZE |
+For each query below, follow these steps:
+
+1. Run `EXPLAIN ANALYZE` **without** an index — record the full output
+2. Create the recommended index
+3. Run `EXPLAIN ANALYZE` **again** — record the full output
+4. Calculate the improvement factor (before time ÷ after time)
+5. Write one sentence explaining why the improvement occurred (in the **Explanation** field under each comparison)
+
+### Comparison 1
+
+```sql
+-- Query
+SELECT * FROM order_items WHERE order_id = 55;
+
+-- Index to create
+CREATE INDEX idx_oi_order_id ON order_items (order_id);
+```
+
+| Metric              | Before | After |
+| ------------------- | ------ | ----- |
+| Scan type           |        |       |
+| Execution time (ms) |        |       |
+| Rows examined       |        |       |
+| Improvement factor  | —      |       |
+
+**Explanation:**
+
+> [!NOTE]
+> **_Your Answer_**
+>
+> Scan type: Hash Join, with Sequential Scans on both input tables.
+
+Estimated vs actual rows: estimated 120 rows, actual 115 rows.
+
+Execution time: 1.340 ms.
+
+An index on `order_items(product_id)` can help queries that filter or join using `product_id`. However, for this particular example PostgreSQL reads both whole tables and uses a hash join, so an index is not guaranteed to make this query faster.
+
+### Comparison 2
+
+```sql
+-- Query
+SELECT * FROM products p
+JOIN product_categories pc ON pc.product_id = p.product_id
+WHERE pc.category_id = 2 AND p.price < 80;
+
+CREATE INDEX idx_product_categories_category_id ON product_categories (category_id);
+CREATE INDEX idx_products_price ON products (price);
+
+-- Index to create
+CREATE INDEX idx_products_cat_price ON products (category_id, price);
+```
+
+| Metric              | Before | After |
+| ------------------- | ------ | ----- |
+| Scan type           |        |       |
+| Execution time (ms) |        |       |
+| Rows examined       |        |       |
+| Improvement factor  | —      |       |
+
+**Explanation:**
+
+> [!NOTE]
+> **_Your Answer_**
+>
+> Baseline measurements must be taken from the actual PostgreSQL database. After creating the index, run the same query again and copy the real scan type, execution time, and rows from PostgreSQL. The improvement factor is `Before execution time / After execution time`.
+
+### Comparison 3
+
+```sql
+-- Query
+SELECT * FROM customers WHERE email = 'test.user@example.com';
+
+-- Index to create
+CREATE UNIQUE INDEX idx_customers_email ON customers (email);
+```
+
+| Metric              | Before | After |
+| ------------------- | ------ | ----- |
+| Scan type           |        |       |
+| Execution time (ms) |        |       |
+| Rows examined       |        |       |
+| Improvement factor  | —      |       |
+
+**Explanation:**
+
+> [!NOTE]
+> **_Your Answer_**
+>
+> The indexes can reduce the amount of data PostgreSQL needs to check when filtering by category and price. The exact improvement depends on the size and data distribution of the TrailShop database, so the real values should be copied from PostgreSQL.
+
+### Comparison 4
+
+```sql
+-- Query
+SELECT order_id, SUM(quantity * unit_price) AS total
+FROM order_items
+WHERE order_id IN (10, 20, 30, 40, 50)
+GROUP BY order_id;
+
+-- Index to create
+CREATE INDEX idx_oi_order_id_covering ON order_items (order_id) INCLUDE (quantity, unit_price);
+```
+
+| Metric              | Before | After |
+| ------------------- | ------ | ----- |
+| Scan type           |        |       |
+| Execution time (ms) |        |       |
+| Rows examined       |        |       |
+| Improvement factor  | —      |       |
+
+**Explanation:**
+
+> [!NOTE]
+> **_Your Answer_**
+>
+> The unique email index can let PostgreSQL find the customer directly instead of checking every customer row. The exact execution time depends on the actual database, so the values should be copied from PostgreSQL.
+
+### Comparison 5
+
+```sql
+-- Query
+SELECT * FROM orders WHERE status = 'pending';
+
+-- Index to create (partial index)
+CREATE INDEX idx_orders_pending ON orders (status) WHERE status = 'pending';
+```
+
+| Metric              | Before | After |
+| ------------------- | ------ | ----- |
+| Scan type           |        |       |
+| Execution time (ms) |        |       |
+| Rows examined       |        |       |
+| Improvement factor  | —      |       |
+
+**Explanation:**
+
+> [!NOTE]
+> **_Your Answer_**
+>
+> The covering index contains `order_id`, `quantity`, and `unit_price`, so PostgreSQL may be able to get the needed values directly from the index. The exact performance depends on the actual database.
 
 ---
 
-## Reading Assignments
+## Submission Checklist
 
-> **Mixed.** Both reading lists stay as written. Further Reading is extra documentation. The index-types part of the first assignment supports the advanced types in section 4.
+**Required**
 
-1. **PostgreSQL Documentation — Indexes**
-   [https://www.postgresql.org/docs/current/indexes.html](https://www.postgresql.org/docs/current/indexes.html)
-   Read the overview and sections on index types, multi-column indexes, and partial indexes.
+- [ ] Baseline measurements for all 5 project queries
+- [ ] All 5 indexes created and re-measured
+- [ ] Comparison table filled with before/after data
+- [ ] Recommendation paragraph written
+- [ ] All 8 theory questions answered
 
-2. **PostgreSQL Documentation — Using EXPLAIN**
-   [https://www.postgresql.org/docs/current/using-explain.html](https://www.postgresql.org/docs/current/using-explain.html)
-   Read the full page. Practice reading EXPLAIN output on your own queries.
+**Recommended practice**
 
-3. **Watt & Eng — Database Design, 2nd Edition**
-   Review the chapter on physical database design and indexing strategies.
-
----
-
-## Further Reading
-
-> **Advanced.** Extra documentation. Read it after the fundamentals are solid.
-
-- **Use The Index, Luke** — [https://use-the-index-luke.com/](https://use-the-index-luke.com/)
-  An excellent free online book dedicated entirely to database indexing. Covers B-tree internals, multi-column indexes, partial indexes, and query tuning with clear explanations and diagrams.
-
-- **pgMustard** — [https://www.pgmustard.com/](https://www.pgmustard.com/)
-  A tool that analyzes PostgreSQL EXPLAIN output and provides actionable optimization tips. Useful for learning to read execution plans.
-
-- **PostgreSQL Wiki — Performance Optimization**
-  [https://wiki.postgresql.org/wiki/Performance_Optimization](https://wiki.postgresql.org/wiki/Performance_Optimization)
-  Community-maintained collection of performance tips, configuration advice, and monitoring queries.
-
----
-
-## Summary
-
-> **Fundamentals.** This recap leads with the focus topics. The sentence on Hash, GIN, GiST, and BRIN is the advanced material from section 4.
-
-This week you learned that query performance isn't magic — it's engineering. Without indexes, PostgreSQL must read every row in a table (O(n)), and performance degrades linearly as data grows. Indexes — primarily B-trees — provide O(log n) lookups by maintaining a sorted, balanced tree structure separate from the table data.
-
-PostgreSQL offers specialized index types beyond B-tree: Hash for pure equality, GIN for arrays and full-text search, GiST for spatial data, and BRIN for large time-series tables. You learned to create basic, unique, multi-column, partial, expression, and covering indexes — and critically, that foreign key columns do **not** get automatic indexes.
-
-With `EXPLAIN` and `EXPLAIN ANALYZE`, you can see exactly how PostgreSQL executes a query — which scan type it uses, which join algorithm it picks, and how long each step takes. You saw real before/after examples where proper indexing delivered improvements of 1,000× to 10,000×.
-
-But indexing is not a silver bullet. Every index adds write overhead, consumes storage, and requires maintenance. The art is in choosing the *right* indexes for your query patterns while avoiding over-indexing.
-
-**Next week**: We move from optimizing queries to managing the database itself — **database administration**. You'll learn about managing users and roles, securing data with permissions, backing up and restoring databases, and we'll take a first look at NoSQL alternatives.
+- [ ] All 4 EXPLAIN outputs analyzed
+- [ ] Index recommendations for all 10 queries
+- [ ] All 5 performance comparisons completed with explanations
